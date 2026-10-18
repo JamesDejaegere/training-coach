@@ -1,3 +1,4 @@
+using TrainingCoach.Infrastructure;
 using TrainingCoach.Infrastructure.Storage;
 using TrainingCoach.Web.Components;
 
@@ -7,12 +8,21 @@ builder.AddServiceDefaults();
 
 var dataDirectory = DataDirectoryResolver.Resolve(builder.Configuration["DataDirectory"], builder.Environment.ContentRootPath);
 builder.Configuration["DataDirectory"] = dataDirectory;
+builder.Services.AddInfrastructure(dataDirectory);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
 var app = builder.Build();
+
+await app.Services.MigrateDatabaseAsync();
+if (app.Environment.IsDevelopment())
+{
+    // One-off plan import (SPEC 5.4) for development: the seed workbook in the repository root.
+    var seed = Path.GetFullPath(Path.Combine(dataDirectory, "..", "seed", "Schema_Antwerp_10_Miles_2027.xlsx"));
+    await app.Services.SeedPlanIfEmptyAsync(seed);
+}
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
