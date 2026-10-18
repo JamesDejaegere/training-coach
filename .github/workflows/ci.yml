@@ -1,0 +1,17 @@
+﻿name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet restore TrainingCoach.slnx
+      - run: dotnet build TrainingCoach.slnx --no-restore -c Release
+      - run: dotnet test TrainingCoach.slnx --no-build -c Release

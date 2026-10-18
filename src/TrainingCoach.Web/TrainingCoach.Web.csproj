@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\TrainingCoach.Domain\TrainingCoach.Domain.csproj" />
+    <ProjectReference Include="..\TrainingCoach.Infrastructure\TrainingCoach.Infrastructure.csproj" />
+    <ProjectReference Include="..\TrainingCoach.ServiceDefaults\TrainingCoach.ServiceDefaults.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+</Project>
