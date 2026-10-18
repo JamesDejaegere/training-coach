@@ -7,8 +7,8 @@ public class PlanMatcherTests
 {
     private static readonly DateOnly Day = new(2027, 3, 2);
 
-    private static PlannedSessionRef Plan(int id, SportFamily sport, double? km = null, DateOnly? date = null) =>
-        new(id, date ?? Day, sport, km);
+    private static PlannedSessionRef Plan(int id, SportFamily sport, double? km = null, DateOnly? date = null, bool commute = false) =>
+        new(id, date ?? Day, sport, km, commute);
 
     private static ActivityRef Act(int id, SportFamily sport, double? km = null, bool commute = false, DateOnly? date = null) =>
         new(id, date ?? Day, sport, km, commute);
@@ -59,7 +59,7 @@ public class PlanMatcherTests
     }
 
     [Fact]
-    public void Commutes_are_never_matched_and_are_not_reported_as_extra()
+    public void Commute_activities_never_match_a_non_commute_plan_and_are_not_extra()
     {
         var result = PlanMatcher.Match([Plan(1, SportFamily.Ride, 60)], [Act(100, SportFamily.Ride, 30, commute: true)]);
 
@@ -75,5 +75,36 @@ public class PlanMatcherTests
         var result = PlanMatcher.Match([Plan(1, SportFamily.Strength)], [Act(100, SportFamily.Strength)]);
 
         Assert.Equal(new[] { new PlanMatch(1, 100) }, result.Matches);
+    }
+
+    [Fact]
+    public void Both_legs_of_a_commute_attach_to_the_planned_commute_session()
+    {
+        var result = PlanMatcher.Match(
+            [Plan(1, SportFamily.Ride, 60, commute: true)],
+            [Act(100, SportFamily.Ride, 30, commute: true), Act(101, SportFamily.Ride, 30, commute: true)]);
+
+        Assert.Equal(new[] { new PlanMatch(1, 100), new PlanMatch(1, 101) }, result.Matches.OrderBy(m => m.ActivityId));
+        Assert.Empty(result.CommuteActivityIds);
+        Assert.Empty(result.UnmatchedPlannedIds);
+    }
+
+    [Fact]
+    public void Plain_ride_replaces_a_skipped_commute_when_no_commute_was_detected()
+    {
+        var result = PlanMatcher.Match([Plan(1, SportFamily.Ride, 60, commute: true)], [Act(100, SportFamily.Ride, 50)]);
+
+        Assert.Equal(new[] { new PlanMatch(1, 100) }, result.Matches);
+    }
+
+    [Fact]
+    public void Plain_ride_does_not_take_a_commute_session_already_matched_by_commute_activities()
+    {
+        var result = PlanMatcher.Match(
+            [Plan(1, SportFamily.Ride, 60, commute: true)],
+            [Act(100, SportFamily.Ride, 60, commute: true), Act(101, SportFamily.Ride, 20)]);
+
+        Assert.Equal(new[] { new PlanMatch(1, 100) }, result.Matches);
+        Assert.Equal(new[] { 101 }, result.ExtraActivityIds);
     }
 }
