@@ -1,0 +1,124 @@
+@page "/kracht"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@using TrainingCoach.Domain.Strength
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
+@using TrainingCoach.Infrastructure.Strength
+@inject StrengthStore Store
+@inject MuscleAnalytics Muscles
+@inject TrainingAnalytics Analytics
+@inject NavigationManager Navigation
+
+<PageTitle>Krachttraining</PageTitle>
+
+<h1>Krachttraining</h1>
+
+@if (loading)
+{
+    <p>Laden…</p>
+}
+else
+{
+    @if (inProgress is not null)
+    {
+        <div class="alert alert-info d-flex align-items-center justify-content-between">
+            <span>Er is nog een sessie bezig (gestart om @TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(inProgress.StartedUtc, DateTimeKind.Utc), TimeZoneInfo.Local).ToString("HH:mm")).</span>
+            <a class="btn btn-primary" href="/kracht/sessie/@inProgress.Id">Verder gaan</a>
+        </div>
+    }
+
+    <div class="d-flex flex-wrap gap-2 mb-4">
+        <button class="btn btn-primary btn-lg" @onclick="StartRoutine">Start krachtroutine (±25')</button>
+        <button class="btn btn-outline-primary btn-lg" @onclick="StartEmpty">Lege sessie</button>
+        <a class="btn btn-outline-secondary btn-lg" href="/kracht/bibliotheek">Oefeningen</a>
+    </div>
+
+    <h2 class="h4">Spierbelasting afgelopen 7 dagen</h2>
+    <MuscleMap Intensity="intensity" />
+    <p class="small text-muted text-center">
+        Kracht telt per voltooide set (hoofdspier 1, hulpspier ½); lopen en fietsen belasten benen en heupen in verhouding tot hun trainingsbelasting.
+    </p>
+
+    <h2 class="h4 mt-4">Progressie</h2>
+    <div class="row g-3">
+        @foreach (var status in ladders)
+        {
+            <div class="col-md-6">
+                <section class="card h-100"><div class="card-body">
+                    <h3 class="h6">@status.Ladder.NameNl</h3>
+                    <ol class="mb-2 ps-3">
+                        @foreach (var key in status.Ladder.Steps)
+                        {
+                            var e = ExerciseLibrary.ByKey[key];
+                            <li class="@(status.Current?.Key == key ? "fw-bold" : "text-muted")">
+                                @e.NameNl @if (status.Current?.Key == key) { <span class="badge text-bg-primary ms-1">nu</span> }
+                            </li>
+                        }
+                    </ol>
+                    @if (status.Suggestion is { } next)
+                    {
+                        <p class="mb-0 text-success">✔ Top bereikt bij lage inspanning: probeer volgende keer <strong>@next.NameNl</strong>.</p>
+                    }
+                    else if (status.Current is null)
+                    {
+                        <p class="mb-0 text-muted small">Nog geen sessies met deze oefeningen.</p>
+                    }
+                    else
+                    {
+                        <p class="mb-0 text-muted small">Nog niet klaar voor de volgende stap: haal @status.Current.Sets × @status.Current.Target@(status.Current.Timed ? " s" : "")@(status.Current.Unilateral ? " per kant" : "") met RPE ≤ @ProgressionRule.MaxRpeForProgression.</p>
+                    }
+                </div></section>
+            </div>
+        }
+    </div>
+
+    <h2 class="h4 mt-4">Recente sessies</h2>
+    @if (sessions.Count == 0)
+    {
+        <p class="text-muted">Nog geen sessies.</p>
+    }
+    else
+    {
+        <ul class="list-group">
+            @foreach (var s in sessions)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <span>
+                        @Format.ShortDate(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(s.StartedUtc, DateTimeKind.Utc), TimeZoneInfo.Local)))
+                        · @s.ExerciseCount oefeningen · @s.CompletedSetCount/@s.SetCount sets
+                        @if (s.Rpe is { } rpe) { <span> · RPE @rpe</span> }
+                        @if (s.Status == StrengthSessionStatus.InProgress) { <span class="badge text-bg-info ms-1">bezig</span> }
+                    </span>
+                    <a href="/kracht/sessie/@s.Id">Bekijk</a>
+                </li>
+            }
+        </ul>
+    }
+}
+
+@code {
+    private bool loading = true;
+    private IReadOnlyList<StrengthSessionSummary> sessions = [];
+    private StrengthSessionSummary? inProgress;
+    private IReadOnlyList<LadderStatus> ladders = [];
+    private IReadOnlyDictionary<Muscle, double> intensity = new Dictionary<Muscle, double>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        sessions = await Store.ListAsync();
+        inProgress = sessions.FirstOrDefault(s => s.Status == StrengthSessionStatus.InProgress);
+        ladders = await Store.LadderStatusAsync();
+        intensity = MuscleLoad.Intensity(await Muscles.RollingAsync(Analytics.Today));
+        loading = false;
+    }
+
+    private async Task StartRoutine() => await Start(ExerciseLibrary.Routine);
+
+    private async Task StartEmpty() => await Start([]);
+
+    private async Task Start(IReadOnlyList<string> keys)
+    {
+        var id = await Store.StartSessionAsync(keys);
+        Navigation.NavigateTo($"/kracht/sessie/{id}");
+    }
+}

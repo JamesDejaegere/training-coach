@@ -11,6 +11,10 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<RecoveryDayEntity> RecoveryDays => Set<RecoveryDayEntity>();
     public DbSet<AthleteSettingsEntity> AthleteSettings => Set<AthleteSettingsEntity>();
     public DbSet<PainReportEntity> PainReports => Set<PainReportEntity>();
+    public DbSet<CustomExerciseEntity> CustomExercises => Set<CustomExerciseEntity>();
+    public DbSet<StrengthSessionEntity> StrengthSessions => Set<StrengthSessionEntity>();
+    public DbSet<StrengthEntryEntity> StrengthEntries => Set<StrengthEntryEntity>();
+    public DbSet<StrengthSetEntity> StrengthSets => Set<StrengthSetEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +40,15 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(a => new { a.UserId, a.StartLocal });
             e.Property(a => a.Sport).HasConversion<string>();
         });
+
+        modelBuilder.Entity<StrengthSessionEntity>(e =>
+        {
+            e.HasIndex(s => new { s.UserId, s.StartedUtc });
+            e.Property(s => s.Status).HasConversion<string>();
+            e.HasMany(s => s.Entries).WithOne().HasForeignKey(x => x.SessionId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<StrengthEntryEntity>(e =>
+            e.HasMany(x => x.Sets).WithOne().HasForeignKey(s => s.EntryId).OnDelete(DeleteBehavior.Cascade));
 
         modelBuilder.Entity<AthleteSettingsEntity>(e => e.HasIndex(s => s.UserId).IsUnique());
         modelBuilder.Entity<PainReportEntity>(e => e.HasIndex(p => new { p.UserId, p.Date }));

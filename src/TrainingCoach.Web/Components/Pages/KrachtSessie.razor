@@ -1,0 +1,337 @@
+@page "/kracht/sessie/{Id:int}"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@implements IDisposable
+@using TrainingCoach.Domain.Strength
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
+@using TrainingCoach.Infrastructure.Strength
+@inject StrengthStore Store
+@inject ExerciseCatalog Catalog
+@inject ActivityStore Activities
+@inject NavigationManager Navigation
+
+<PageTitle>Krachtsessie</PageTitle>
+
+@if (loading)
+{
+    <p>Laden…</p>
+}
+else if (view is null)
+{
+    <p class="text-danger">Sessie niet gevonden.</p>
+    <a href="/kracht">‹ Krachttraining</a>
+}
+else if (view.Session.Status == StrengthSessionStatus.Finished)
+{
+    <p><a href="/kracht">‹ Krachttraining</a></p>
+    <h1>Sessie afgerond</h1>
+    <p class="lead">
+        @Elapsed(view.Session.EndedUtc!.Value - view.Session.StartedUtc) · @CompletedSets(view)/@TotalSets(view) sets
+        @if (view.Session.Rpe is { } rpe) { <span> · RPE @rpe</span> }
+    </p>
+
+    <h2 class="h5">Belaste spieren</h2>
+    <MuscleMap Intensity="MuscleLoad.Intensity(StrengthStore.MuscleLoadOf(view), reference: 6)" />
+
+    <h2 class="h5 mt-4">Volgende keer</h2>
+    <ul>
+        @foreach (var entry in view.Entries)
+        {
+            var next = ProgressionRule.Suggest(entry.Exercise, entry.Sets.Select(Result).ToList(), view.Session.Rpe);
+            <li>
+                @entry.Exercise.NameNl:
+                @if (next is not null) { <strong class="text-success">klaar voor @next.NameNl</strong> }
+                else { <span class="text-muted">blijf bij deze variant</span> }
+            </li>
+        }
+    </ul>
+
+    @if (view.Session.ActivityId is { } activityId)
+    {
+        <a class="btn btn-outline-secondary" href="/activiteiten/@activityId">Bekijk als activiteit</a>
+    }
+}
+else
+{
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <h1 class="mb-0">Krachtsessie</h1>
+        <div class="text-end">
+            <div class="fs-4 fw-bold">@Elapsed(now - view.Session.StartedUtc)</div>
+            @if (RestRemaining() is { } rest)
+            {
+                <div class="@(rest > 0 ? "text-primary" : "text-success") fw-bold">
+                    @(rest > 0 ? $"Rust: {rest / 60}:{rest % 60:00}" : "Klaar voor de volgende set")
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="my-2 small">
+        Rusttijd:
+        @foreach (var seconds in new[] { 60, 90, 120, 180 })
+        {
+            var s = seconds;
+            <button class="btn btn-sm @(restSeconds == s ? "btn-secondary" : "btn-outline-secondary") me-1" @onclick="() => restSeconds = s">@(s)s</button>
+        }
+    </div>
+
+    @foreach (var entry in view.Entries)
+    {
+        var e = entry.Exercise;
+        <section class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <h2 class="h5">@e.NameNl</h2>
+                    <button class="btn btn-sm btn-link text-danger" @onclick="() => RemoveExercise(entry.Entry.Id)">verwijderen</button>
+                </div>
+                <p class="text-muted small mb-1">
+                    @e.Sets × @e.Target@(e.Timed ? " seconden" : " herhalingen")@(e.Unilateral ? " per kant" : "")
+                </p>
+                @if (entry.Previous is { } previous)
+                {
+                    <p class="small mb-1">Vorige keer (@Format.ShortDate(previous.Date)@(previous.Rpe is { } r ? $", RPE {r}" : "")): <strong>@Describe(e, previous)</strong></p>
+                    @if (ProgressionRule.Suggest(e, previous.Sets, previous.Rpe) is { } tip)
+                    {
+                        <p class="small text-success mb-1">Top bereikt: probeer vandaag <strong>@tip.NameNl</strong>.
+                            <button class="btn btn-sm btn-outline-success ms-1" @onclick="() => Swap(entry, tip.Key)">Wissel</button></p>
+                    }
+                }
+                <details class="mb-2">
+                    <summary class="small">Uitleg</summary>
+                    <p class="small mb-1">@e.InstructionsNl</p>
+                    <p class="small text-muted mb-0">Hoofdspieren: @string.Join(", ", e.Primary.Select(MuscleNames.Dutch))@(e.Secondary.Count > 0 ? "; hulpspieren: " + string.Join(", ", e.Secondary.Select(MuscleNames.Dutch)) : "")</p>
+                </details>
+
+                @foreach (var set in entry.Sets)
+                {
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <div style="width:5.5rem" class="small">Set @set.Number@(SideLabel(set))</div>
+                        <input type="number" min="0" inputmode="numeric" class="form-control form-control-lg" style="max-width:7rem"
+                               value="@(e.Timed ? set.DurationSeconds : set.Reps)"
+                               @onchange="args => ChangeValue(entry, set, args.Value?.ToString())"
+                               aria-label="@(e.Timed ? "Seconden" : "Herhalingen")" />
+                        <span class="small text-muted">@(e.Timed ? "s" : "×")</span>
+                        <button class="btn btn-lg @(set.Completed ? "btn-success" : "btn-outline-success")"
+                                @onclick="() => Toggle(entry, set)" aria-label="Set voltooid">✓</button>
+                        <button class="btn btn-sm btn-link text-muted" @onclick="() => RemoveSet(set.Id)" aria-label="Set verwijderen">✕</button>
+                    </div>
+                }
+                <button class="btn btn-sm btn-outline-secondary" @onclick="() => AddSet(entry.Entry.Id)">+ set</button>
+            </div>
+        </section>
+    }
+
+    <section class="card mb-3">
+        <div class="card-body">
+            <label class="form-label" for="add">Oefening toevoegen</label>
+            <div class="d-flex gap-2">
+                <select id="add" class="form-select" @bind="addKey">
+                    <option value="">Kies…</option>
+                    @foreach (var group in catalog.GroupBy(c => c.Pattern))
+                    {
+                        <optgroup label="@PatternNames.Dutch(group.Key)">
+                            @foreach (var c in group) { <option value="@c.Key">@c.NameNl</option> }
+                        </optgroup>
+                    }
+                </select>
+                <button class="btn btn-outline-primary" @onclick="AddExercise" disabled="@(addKey == "")">Toevoegen</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="card mb-5">
+        <div class="card-body">
+            <h2 class="h5">Afronden</h2>
+            <p class="mb-1">Hoe zwaar voelde de sessie? (RPE)</p>
+            <div class="btn-group flex-wrap mb-3" role="group" aria-label="RPE">
+                @for (var rpe = 1; rpe <= 10; rpe++)
+                {
+                    var value = rpe;
+                    <button type="button" class="btn btn-lg @(finishRpe == value ? "btn-primary" : "btn-outline-primary")" @onclick="() => finishRpe = value">@value</button>
+                }
+            </div>
+
+            <p class="mb-1">Pijn gehad? (optioneel)</p>
+            <div class="row g-2 mb-3">
+                <div class="col-7">
+                    <select class="form-select" @bind="painLocation" aria-label="Plaats">
+                        <option value="">Geen pijn</option>
+                        @foreach (var l in PainLocations) { <option value="@l">@l</option> }
+                    </select>
+                </div>
+                <div class="col-5">
+                    <input type="number" min="1" max="10" class="form-control" @bind="painSeverity" aria-label="Ernst (1-10)" disabled="@(painLocation == "")" />
+                </div>
+            </div>
+
+            @if (error is not null) { <p class="text-danger">@error</p> }
+            <div class="d-flex gap-2">
+                <button class="btn btn-success btn-lg" @onclick="Finish" disabled="@(finishRpe is null)">Sessie afronden</button>
+                <button class="btn btn-outline-danger" @onclick="Discard">Weggooien</button>
+            </div>
+        </div>
+    </section>
+}
+
+@code {
+    private static readonly string[] PainLocations = ["voet", "enkel", "kuit", "achillespees", "scheen", "knie", "hamstring", "quadriceps", "heup", "lies", "bil", "onderrug", "andere"];
+
+    [Parameter] public int Id { get; set; }
+
+    private bool loading = true;
+    private StrengthSessionView? view;
+    private IReadOnlyList<ExerciseDefinition> catalog = [];
+    private DateTime now = DateTime.UtcNow;
+    private DateTime? restEndsUtc;
+    private int restSeconds = 90;
+    private int? finishRpe;
+    private string painLocation = "";
+    private int painSeverity = 3;
+    private string addKey = "";
+    private string? error;
+    private CancellationTokenSource? cts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        catalog = await Catalog.AllAsync();
+        await Reload();
+        loading = false;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender) return;
+        cts = new CancellationTokenSource();
+        _ = TickAsync(cts.Token);
+    }
+
+    private async Task TickAsync(CancellationToken token)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await timer.WaitForNextTickAsync(token))
+            {
+                now = DateTime.UtcNow;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        cts?.Cancel();
+        cts?.Dispose();
+    }
+
+    private async Task Reload() => view = await Store.GetSessionAsync(Id);
+
+    /// <summary>Seconds left of the rest timer; 0 for a short while after it ended, then null.</summary>
+    private int? RestRemaining()
+    {
+        if (restEndsUtc is not { } end) return null;
+        var remaining = (int)Math.Ceiling((end - now).TotalSeconds);
+        return remaining > 0 ? remaining : (now - end).TotalSeconds < 20 ? 0 : null;
+    }
+
+    private async Task Toggle(EntryView entry, StrengthSetEntity set)
+    {
+        var completed = !set.Completed;
+        await Store.UpdateSetAsync(set.Id, set.Reps, set.DurationSeconds, completed, set.AddedLoadKg);
+        if (completed) restEndsUtc = DateTime.UtcNow.AddSeconds(restSeconds);
+        await Reload();
+    }
+
+    private async Task ChangeValue(EntryView entry, StrengthSetEntity set, string? text)
+    {
+        if (!int.TryParse(text, out var value)) return;
+        var timed = entry.Exercise.Timed;
+        await Store.UpdateSetAsync(set.Id, timed ? set.Reps : value, timed ? value : set.DurationSeconds, set.Completed, set.AddedLoadKg);
+        await Reload();
+    }
+
+    private async Task AddSet(int entryId)
+    {
+        await Store.AddSetAsync(entryId);
+        await Reload();
+    }
+
+    private async Task RemoveSet(int setId)
+    {
+        await Store.RemoveSetAsync(setId);
+        await Reload();
+    }
+
+    private async Task RemoveExercise(int entryId)
+    {
+        await Store.RemoveExerciseAsync(entryId);
+        await Reload();
+    }
+
+    private async Task AddExercise()
+    {
+        if (addKey == "") return;
+        await Store.AddExerciseAsync(Id, addKey);
+        addKey = "";
+        await Reload();
+    }
+
+    /// <summary>Replaces the exercise by the next ladder step, keeping the session otherwise as it is.</summary>
+    private async Task Swap(EntryView entry, string newKey)
+    {
+        await Store.AddExerciseAsync(Id, newKey);
+        await Store.RemoveExerciseAsync(entry.Entry.Id);
+        await Reload();
+    }
+
+    private async Task Finish()
+    {
+        error = null;
+        try
+        {
+            var activityId = await Store.FinishAsync(Id, finishRpe);
+            if (painLocation != "")
+                await Activities.AddPainAsync(activityId, painLocation, painSeverity);
+            await Reload();
+        }
+        catch (Exception ex) when (ex is ArgumentException or InvalidOperationException)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task Discard()
+    {
+        await Store.DiscardAsync(Id);
+        Navigation.NavigateTo("/kracht");
+    }
+
+    private static SetResult Result(StrengthSetEntity s) =>
+        new(s.Reps, s.DurationSeconds, s.Completed, Enum.TryParse<SetSide>(s.Side, out var side) ? side : SetSide.None);
+
+    private static string SideLabel(StrengthSetEntity set) => set.Side switch
+    {
+        "Left" => " links",
+        "Right" => " rechts",
+        _ => "",
+    };
+
+    private static string Describe(ExerciseDefinition e, PreviousPerformance previous)
+    {
+        string Value(SetResult s) => e.Timed ? $"{s.DurationSeconds}s" : s.Reps.ToString();
+
+        if (!e.Unilateral)
+            return string.Join(" · ", previous.Sets.Select(Value));
+
+        return string.Join(" · ", previous.Sets.Chunk(2).Select(pair => string.Join(" ", pair.Select(s => (s.Side == SetSide.Left ? "L " : "R ") + Value(s)))));
+    }
+
+    private static string Elapsed(TimeSpan span) =>
+        span.TotalHours >= 1 ? $"{(int)span.TotalHours}:{span.Minutes:00}:{span.Seconds:00}" : $"{span.Minutes}:{span.Seconds:00}";
+
+    private static int CompletedSets(StrengthSessionView v) => v.Entries.Sum(e => e.Sets.Count(s => s.Completed));
+
+    private static int TotalSets(StrengthSessionView v) => v.Entries.Sum(e => e.Sets.Count);
+}

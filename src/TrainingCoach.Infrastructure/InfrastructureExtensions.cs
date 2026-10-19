@@ -7,6 +7,7 @@ using TrainingCoach.Infrastructure.Persistence;
 using TrainingCoach.Infrastructure.PlanImport;
 using TrainingCoach.Infrastructure.Polar;
 using TrainingCoach.Infrastructure.Strava;
+using TrainingCoach.Infrastructure.Strength;
 
 namespace TrainingCoach.Infrastructure;
 
@@ -40,6 +41,9 @@ public static class InfrastructureExtensions
         services.AddScoped<AthleteSettingsStore>();
         services.AddScoped<ActivityStore>();
         services.AddScoped<TrainingAnalytics>();
+        services.AddScoped<ExerciseCatalog>();
+        services.AddScoped<StrengthStore>();
+        services.AddScoped<MuscleAnalytics>();
         services.AddHostedService<DatabaseBackupService>();
         return services;
     }

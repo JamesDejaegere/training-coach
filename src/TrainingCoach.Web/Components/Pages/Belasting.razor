@@ -3,9 +3,12 @@
 @using Microsoft.EntityFrameworkCore
 @using TrainingCoach.Domain.Calculations
 @using TrainingCoach.Domain.Planning
+@using TrainingCoach.Domain.Strength
 @using TrainingCoach.Domain.Warnings
 @using TrainingCoach.Infrastructure.Analytics
 @using TrainingCoach.Infrastructure.Persistence
+@using TrainingCoach.Infrastructure.Strength
+@inject MuscleAnalytics Muscles
 @inject TrainingAnalytics Analytics
 @inject AppDbContext Db
 
@@ -56,6 +59,10 @@ else
         </table>
     </div>
 
+    <h2 class="h4 mt-4">Spierbelasting afgelopen 7 dagen</h2>
+    <MuscleMap Intensity="muscleIntensity" />
+    <p class="small text-muted text-center">Kracht per voltooide set, lopen en fietsen in verhouding tot hun belasting. Zo zie je hoe vermoeid je benen zijn na een lange loop.</p>
+
     <h2 class="h4 mt-4">HRV en rusthartslag</h2>
     @if (recoveryLabels.Count == 0)
     {
@@ -82,6 +89,7 @@ else
     private List<LineChart.ChartSeries> hrvSeries = [];
     private List<LineChart.ChartSeries> restingSeries = [];
     private HrvBand? band;
+    private IReadOnlyDictionary<Muscle, double> muscleIntensity = new Dictionary<Muscle, double>();
 
     protected override Task OnInitializedAsync() => Load();
 
@@ -106,6 +114,7 @@ else
         volumes = (await Analytics.WeeklyVolumesAsync(from, today)).ToList();
         maxLoad = volumes.Count == 0 ? 0 : volumes.Max(v => v.Load);
 
+        muscleIntensity = MuscleLoad.Intensity(await Muscles.RollingAsync(today));
         await LoadRecovery(from, today);
         loading = false;
     }

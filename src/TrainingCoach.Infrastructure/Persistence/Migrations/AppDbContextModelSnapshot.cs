@@ -176,6 +176,56 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                     b.ToTable("AthleteSettings");
                 });
 
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.CustomExerciseEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Equipment")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Instructions")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NameNl")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Pattern")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PrimaryMuscles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SecondaryMuscles")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Sets")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Target")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Timed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Unilateral")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("CustomExercises");
+                });
+
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.PainReportEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -357,6 +407,96 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                     b.ToTable("RecoveryDays");
                 });
 
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.StrengthEntryEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ExerciseKey")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SessionId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId");
+
+                    b.ToTable("StrengthEntries");
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.StrengthSessionEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ActivityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("EndedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("Rpe")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("StartedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "StartedUtc");
+
+                    b.ToTable("StrengthSessions");
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.StrengthSetEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("AddedLoadKg")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("Completed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DurationSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("EntryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Number")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Reps")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Side")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EntryId");
+
+                    b.ToTable("StrengthSets");
+                });
+
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.WorkoutPhaseEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -431,6 +571,24 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                     b.ToTable("Workouts");
                 });
 
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.StrengthEntryEntity", b =>
+                {
+                    b.HasOne("TrainingCoach.Infrastructure.Persistence.StrengthSessionEntity", null)
+                        .WithMany("Entries")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.StrengthSetEntity", b =>
+                {
+                    b.HasOne("TrainingCoach.Infrastructure.Persistence.StrengthEntryEntity", null)
+                        .WithMany("Sets")
+                        .HasForeignKey("EntryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.WorkoutPhaseEntity", b =>
                 {
                     b.HasOne("TrainingCoach.Infrastructure.Persistence.WorkoutTemplateEntity", null)
@@ -438,6 +596,16 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                         .HasForeignKey("WorkoutTemplateEntityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.StrengthEntryEntity", b =>
+                {
+                    b.Navigation("Sets");
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.StrengthSessionEntity", b =>
+                {
+                    b.Navigation("Entries");
                 });
 
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.WorkoutTemplateEntity", b =>

@@ -1,0 +1,104 @@
+@using System.Globalization
+@using TrainingCoach.Domain.Strength
+
+@* Own muscle map (SPEC 9, D23): front and back view in plain SVG; each muscle is coloured by its intensity (0..1). *@
+
+<div class="d-flex flex-wrap justify-content-center gap-3 @CssClass">
+    @foreach (var view in Views)
+    {
+        <figure class="m-0 text-center" style="width: @(Width)px; max-width: 48%;">
+            <svg viewBox="0 0 200 400" class="w-100" role="img" aria-label="@view.Label">
+                @* silhouette *@
+                <g fill="#f1f3f5" stroke="#adb5bd" stroke-width="1.5">
+                    <circle cx="100" cy="30" r="17" />
+                    <rect x="90" y="44" width="20" height="18" rx="6" />
+                    <rect x="68" y="58" width="64" height="152" rx="22" />
+                    <rect x="36" y="66" width="24" height="136" rx="12" />
+                    <rect x="140" y="66" width="24" height="136" rx="12" />
+                    <rect x="68" y="196" width="30" height="196" rx="14" />
+                    <rect x="102" y="196" width="30" height="196" rx="14" />
+                </g>
+                @foreach (var shape in view.Shapes)
+                {
+                    var intensity = Intensity.TryGetValue(shape.Muscle, out var v) ? v : 0;
+                    <g fill="@Fill(intensity)" stroke="@(intensity > 0 ? "#c2410c" : "#ced4da")" stroke-width="0.8">
+                        <title>@MuscleNames.Dutch(shape.Muscle) (@((intensity * 100).ToString("0", CultureInfo.InvariantCulture))%)</title>
+                        @if (shape.IsRect)
+                        {
+                            <rect x="@N(shape.X)" y="@N(shape.Y)" width="@N(shape.W)" height="@N(shape.H)" rx="@N(Math.Min(shape.W, shape.H) / 3)" />
+                        }
+                        else
+                        {
+                            <ellipse cx="@N(shape.X)" cy="@N(shape.Y)" rx="@N(shape.W)" ry="@N(shape.H)" />
+                        }
+                    </g>
+                }
+            </svg>
+            <figcaption class="small text-muted">@view.Label</figcaption>
+        </figure>
+    }
+</div>
+
+@if (ShowLegend)
+{
+    <div class="d-flex align-items-center justify-content-center small text-muted gap-2 mt-1">
+        <span>weinig</span>
+        <span style="display:inline-block;width:120px;height:10px;border-radius:5px;background:linear-gradient(to right, #ffe8cc, #e8590c);"></span>
+        <span>veel</span>
+    </div>
+}
+
+@code {
+    private sealed record Shape(Muscle Muscle, bool IsRect, double X, double Y, double W, double H);
+
+    private sealed record ViewDefinition(string Label, IReadOnlyList<Shape> Shapes);
+
+    /// <summary>0..1 per muscle; missing muscles are drawn neutral.</summary>
+    [Parameter] public IReadOnlyDictionary<Muscle, double> Intensity { get; set; } = new Dictionary<Muscle, double>();
+    [Parameter] public int Width { get; set; } = 170;
+    [Parameter] public bool ShowLegend { get; set; } = true;
+    [Parameter] public string CssClass { get; set; } = "";
+
+    private static Shape E(Muscle m, double cx, double cy, double rx, double ry) => new(m, false, cx, cy, rx, ry);
+    private static Shape R(Muscle m, double x, double y, double w, double h) => new(m, true, x, y, w, h);
+
+    private static readonly ViewDefinition[] Views =
+    [
+        new("Voorkant",
+        [
+            E(Muscle.Shoulders, 66, 86, 15, 13), E(Muscle.Shoulders, 134, 86, 15, 13),
+            E(Muscle.Chest, 86, 112, 16, 14), E(Muscle.Chest, 114, 112, 16, 14),
+            E(Muscle.Biceps, 48, 126, 8, 18), E(Muscle.Biceps, 152, 126, 8, 18),
+            E(Muscle.Forearms, 48, 172, 7, 22), E(Muscle.Forearms, 152, 172, 7, 22),
+            R(Muscle.Abdominals, 86, 130, 28, 52),
+            E(Muscle.HipFlexors, 84, 196, 10, 8), E(Muscle.HipFlexors, 116, 196, 10, 8),
+            E(Muscle.Adductors, 93, 240, 5, 24), E(Muscle.Adductors, 107, 240, 5, 24),
+            E(Muscle.Quadriceps, 81, 255, 12, 40), E(Muscle.Quadriceps, 119, 255, 12, 40),
+        ]),
+        new("Achterkant",
+        [
+            E(Muscle.Traps, 100, 76, 24, 14),
+            E(Muscle.Shoulders, 66, 88, 14, 12), E(Muscle.Shoulders, 134, 88, 14, 12),
+            E(Muscle.Lats, 82, 122, 14, 28), E(Muscle.Lats, 118, 122, 14, 28),
+            R(Muscle.MiddleBack, 90, 96, 20, 30),
+            R(Muscle.LowerBack, 88, 160, 24, 28),
+            E(Muscle.Triceps, 48, 126, 8, 18), E(Muscle.Triceps, 152, 126, 8, 18),
+            E(Muscle.Forearms, 48, 172, 7, 22), E(Muscle.Forearms, 152, 172, 7, 22),
+            E(Muscle.Glutes, 84, 212, 16, 15), E(Muscle.Glutes, 116, 212, 16, 15),
+            E(Muscle.Abductors, 66, 208, 7, 13), E(Muscle.Abductors, 134, 208, 7, 13),
+            E(Muscle.Hamstrings, 83, 262, 12, 36), E(Muscle.Hamstrings, 117, 262, 12, 36),
+            E(Muscle.Calves, 82, 350, 11, 28), E(Muscle.Calves, 118, 350, 11, 28),
+        ]),
+    ];
+
+    private static string N(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    /// <summary>Light orange (little load) to strong orange (full load); neutral grey for no load.</summary>
+    private static string Fill(double intensity)
+    {
+        if (intensity <= 0) return "#e9ecef";
+        var t = Math.Clamp(intensity, 0, 1);
+        int Mix(int a, int b) => (int)Math.Round(a + (b - a) * t);
+        return $"rgb({Mix(255, 232)},{Mix(232, 89)},{Mix(204, 12)})";
+    }
+}

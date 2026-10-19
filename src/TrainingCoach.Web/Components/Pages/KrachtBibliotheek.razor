@@ -1,0 +1,170 @@
+@page "/kracht/bibliotheek"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@using TrainingCoach.Domain.Strength
+@using TrainingCoach.Infrastructure.Strength
+@inject ExerciseCatalog Catalog
+
+<PageTitle>Oefeningen</PageTitle>
+
+<p><a href="/kracht">‹ Krachttraining</a></p>
+<h1>Oefeningen</h1>
+
+<div class="mb-3">
+    <label class="me-2" for="pattern">Onderdeel</label>
+    <select id="pattern" class="form-select d-inline-block w-auto" @bind="pattern">
+        <option value="">Alle</option>
+        @foreach (var p in Enum.GetValues<MovementPattern>())
+        {
+            <option value="@p">@PatternNames.Dutch(p)</option>
+        }
+    </select>
+</div>
+
+@if (exercises is null)
+{
+    <p>Laden…</p>
+}
+else
+{
+    @foreach (var e in exercises.Where(x => pattern == "" || x.Pattern.ToString() == pattern))
+    {
+        <section class="card mb-2">
+            <div class="card-body py-2">
+                <div class="d-flex justify-content-between align-items-start flex-wrap">
+                    <h2 class="h6 mb-1">@e.NameNl <span class="text-muted fw-normal">· @e.NameEn</span></h2>
+                    <span>
+                        <span class="badge text-bg-secondary">@PatternNames.Dutch(e.Pattern)</span>
+                        <span class="badge text-bg-light border">@LevelName(e.Level)</span>
+                        @if (e.Key.StartsWith(ExerciseCatalog.CustomPrefix)) { <span class="badge text-bg-info">eigen</span> }
+                    </span>
+                </div>
+                <p class="small text-muted mb-1">
+                    @e.Sets × @e.Target@(e.Timed ? " s" : "")@(e.Unilateral ? " per kant" : "")
+                    · @string.Join(", ", e.Equipment.Select(EquipmentNames.Dutch))
+                    @if (e.LadderKey is { } ladderKey && e.LadderStep is { } step)
+                    {
+                        <span> · ladder @ExerciseLibrary.Ladder(ladderKey).NameNl.ToLowerInvariant(): stap @(step + 1) van @ExerciseLibrary.Ladder(ladderKey).Steps.Count</span>
+                    }
+                </p>
+                <details>
+                    <summary class="small">Uitleg en spieren</summary>
+                    <p class="small mt-2 mb-1">@e.InstructionsNl</p>
+                    <p class="small mb-1">
+                        <strong>Hoofdspieren:</strong> @string.Join(", ", e.Primary.Select(MuscleNames.Dutch))
+                        @if (e.Secondary.Count > 0) { <span> · <strong>Hulpspieren:</strong> @string.Join(", ", e.Secondary.Select(MuscleNames.Dutch))</span> }
+                    </p>
+                    <MuscleMap Intensity="Highlight(e)" Width="120" ShowLegend="false" />
+                </details>
+            </div>
+        </section>
+    }
+
+    <h2 class="h4 mt-4">Eigen oefening toevoegen</h2>
+    <section class="card mb-5"><div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label" for="name">Naam</label>
+                <input id="name" class="form-control" @bind="name" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label" for="newpattern">Onderdeel</label>
+                <select id="newpattern" class="form-select" @bind="newPattern">
+                    @foreach (var p in Enum.GetValues<MovementPattern>()) { <option value="@p">@PatternNames.Dutch(p)</option> }
+                </select>
+            </div>
+            <div class="col-md-3 d-flex align-items-end gap-3">
+                <div class="form-check"><input id="uni" class="form-check-input" type="checkbox" @bind="unilateral" /><label class="form-check-label" for="uni">per kant</label></div>
+                <div class="form-check"><input id="timed" class="form-check-input" type="checkbox" @bind="timed" /><label class="form-check-label" for="timed">op tijd</label></div>
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="sets">Sets</label>
+                <input id="sets" type="number" min="1" max="10" class="form-control" @bind="sets" />
+            </div>
+            <div class="col-6 col-md-3">
+                <label class="form-label" for="target">Doel (herhalingen of seconden)</label>
+                <input id="target" type="number" min="1" class="form-control" @bind="target" />
+            </div>
+            <div class="col-12">
+                <span class="form-label d-block">Hoofdspieren</span>
+                @foreach (var m in Enum.GetValues<Muscle>())
+                {
+                    <label class="me-3"><input type="checkbox" checked="@primary.Contains(m)" @onchange="e => Toggle(primary, m, e)" /> @MuscleNames.Dutch(m)</label>
+                }
+            </div>
+            <div class="col-12">
+                <span class="form-label d-block">Hulpspieren</span>
+                @foreach (var m in Enum.GetValues<Muscle>())
+                {
+                    <label class="me-3"><input type="checkbox" checked="@secondary.Contains(m)" @onchange="e => Toggle(secondary, m, e)" /> @MuscleNames.Dutch(m)</label>
+                }
+            </div>
+            <div class="col-12">
+                <span class="form-label d-block">Materiaal</span>
+                @foreach (var q in Enum.GetValues<Equipment>())
+                {
+                    <label class="me-3"><input type="checkbox" checked="@equipment.Contains(q)" @onchange="e => Toggle(equipment, q, e)" /> @EquipmentNames.Dutch(q)</label>
+                }
+            </div>
+            <div class="col-12">
+                <label class="form-label" for="instr">Uitleg</label>
+                <textarea id="instr" class="form-control" rows="2" @bind="instructions"></textarea>
+            </div>
+        </div>
+        <button class="btn btn-primary mt-3" @onclick="AddCustom">Toevoegen</button>
+        @if (message is not null) { <span class="ms-2 @(ok ? "text-success" : "text-danger")">@message</span> }
+    </div></section>
+}
+
+@code {
+    private IReadOnlyList<ExerciseDefinition>? exercises;
+    private string pattern = "";
+
+    private string name = "";
+    private MovementPattern newPattern = MovementPattern.Core;
+    private bool unilateral, timed;
+    private int sets = 3, target = 10;
+    private readonly HashSet<Muscle> primary = [];
+    private readonly HashSet<Muscle> secondary = [];
+    private readonly HashSet<Equipment> equipment = [Equipment.Bodyweight];
+    private string instructions = "";
+    private string? message;
+    private bool ok;
+
+    protected override async Task OnInitializedAsync() => exercises = await Catalog.AllAsync();
+
+    private static IReadOnlyDictionary<Muscle, double> Highlight(ExerciseDefinition e) =>
+        MuscleLoad.Intensity(MuscleLoad.FromSets([(e, new SetResult(1, 0, true, SetSide.None))]), reference: 1);
+
+    private static string LevelName(ExerciseLevel level) => level switch
+    {
+        ExerciseLevel.Beginner => "beginner",
+        ExerciseLevel.Intermediate => "gevorderd",
+        _ => "expert",
+    };
+
+    private static void Toggle<T>(HashSet<T> set, T value, ChangeEventArgs e)
+    {
+        if (e.Value is true) set.Add(value); else set.Remove(value);
+    }
+
+    private async Task AddCustom()
+    {
+        try
+        {
+            await Catalog.AddCustomAsync(new CustomExerciseInput(
+                name, newPattern, [.. primary], [.. secondary], [.. equipment], unilateral, timed, sets, target, instructions));
+            exercises = await Catalog.AllAsync();
+            name = instructions = "";
+            primary.Clear();
+            secondary.Clear();
+            ok = true;
+            message = "Toegevoegd.";
+        }
+        catch (ArgumentException ex)
+        {
+            ok = false;
+            message = ex.Message.Replace("A name is required.", "Geef de oefening een naam.")
+                .Replace("At least one primary muscle is required.", "Kies minstens één hoofdspier.");
+        }
+    }
+}
