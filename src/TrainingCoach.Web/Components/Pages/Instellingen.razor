@@ -1,9 +1,12 @@
 @page "/instellingen"
 @rendermode InteractiveServer
 @using Microsoft.Extensions.Options
+@using TrainingCoach.Infrastructure.Polar
 @using TrainingCoach.Infrastructure.Strava
 @inject StravaSyncService Strava
+@inject PolarSyncService Polar
 @inject IOptions<StravaOptions> StravaOptions
+@inject IOptions<PolarOptions> PolarOptions
 @inject NavigationManager Navigation
 
 <PageTitle>Instellingen</PageTitle>
@@ -28,11 +31,11 @@
                 <em>dotnet user-secrets</em> en start de app opnieuw.
             </p>
         }
-        else if (status is null)
+        else if (stravaStatus is null)
         {
             <p>Laden…</p>
         }
-        else if (!status.Connected)
+        else if (!stravaStatus.Connected)
         {
             <p>Niet verbonden.</p>
             <a class="btn btn-primary" href="/connect/strava">Verbinden met Strava</a>
@@ -40,8 +43,8 @@
         else
         {
             <p>
-                Verbonden. @status.ActivityCount activiteiten.
-                @if (status.LastSyncUtc is { } laatste)
+                Verbonden. @stravaStatus.ActivityCount activiteiten.
+                @if (stravaStatus.LastSyncUtc is { } laatste)
                 {
                     <span>Laatst gesynchroniseerd: @laatste.ToLocalTime().ToString("dd/MM/yyyy HH:mm").</span>
                 }
@@ -50,7 +53,7 @@
                     <span>Nog niet gesynchroniseerd.</span>
                 }
             </p>
-            <button class="btn btn-primary" @onclick="SyncNu" disabled="@bezig">
+            <button class="btn btn-primary" @onclick="SyncStrava" disabled="@bezig">
                 @(bezig ? "Bezig met synchroniseren…" : "Nu synchroniseren")
             </button>
             <a class="btn btn-outline-secondary ms-2" href="/connect/strava">Opnieuw verbinden</a>
@@ -58,44 +61,114 @@
     </div>
 </section>
 
+<section class="card mb-3">
+    <div class="card-body">
+        <h3 class="h5">Polar</h3>
+
+        @if (!PolarOptions.Value.IsConfigured)
+        {
+            <p>
+                De Polar-gegevens ontbreken. Stel <code>Polar:ClientId</code> en <code>Polar:ClientSecret</code> in met
+                <em>dotnet user-secrets</em> en start de app opnieuw.
+            </p>
+        }
+        else if (polarStatus is null)
+        {
+            <p>Laden…</p>
+        }
+        else if (!polarStatus.Connected)
+        {
+            <p>Niet verbonden. Polar geeft alleen trainingen door die na het verbinden worden geüpload (en maximaal 30 dagen terug).</p>
+            <a class="btn btn-primary" href="/connect/polar">Verbinden met Polar</a>
+        }
+        else
+        {
+            <p>
+                Verbonden. @polarStatus.ActivityCount trainingen en @polarStatus.RecoveryDayCount nachten herstel.
+                @if (polarStatus.LastSyncUtc is { } laatstePolar)
+                {
+                    <span>Laatst gesynchroniseerd: @laatstePolar.ToLocalTime().ToString("dd/MM/yyyy HH:mm").</span>
+                }
+                else
+                {
+                    <span>Nog niet gesynchroniseerd.</span>
+                }
+            </p>
+            <button class="btn btn-primary" @onclick="SyncPolar" disabled="@bezig">
+                @(bezig ? "Bezig met synchroniseren…" : "Nu synchroniseren")
+            </button>
+            <a class="btn btn-outline-secondary ms-2" href="/connect/polar">Opnieuw verbinden</a>
+        }
+    </div>
+</section>
+
 @code {
-    private StravaStatus? status;
+    private StravaStatus? stravaStatus;
+    private PolarStatus? polarStatus;
     private bool bezig;
     private (string Klasse, string Tekst)? Melding;
 
     protected override async Task OnInitializedAsync()
     {
-        var query = new Uri(Navigation.Uri).Query;
-        var parameters = System.Web.HttpUtility.ParseQueryString(query);
-        Melding = (parameters["fout"], parameters["verbonden"]) switch
+        var parameters = System.Web.HttpUtility.ParseQueryString(new Uri(Navigation.Uri).Query);
+        Melding = (parameters["fout"], parameters["verbonden"], parameters["polar-verbonden"]) switch
         {
-            ("niet-geconfigureerd", _) => ("alert-danger", "Strava is nog niet geconfigureerd."),
-            ("ongeldige-state", _) => ("alert-danger", "De verbinding kon niet worden bevestigd. Probeer opnieuw."),
-            ("geweigerd", _) => ("alert-warning", "Je hebt de toegang tot Strava geweigerd."),
-            ("onvoldoende-rechten", _) => ("alert-warning", "Vink bij Strava ‘Bekijk je privéactiviteiten’ aan, anders kan niet alles worden geïmporteerd."),
-            (_, "1") => ("alert-success", "Verbonden met Strava. De volledige historiek wordt op de achtergrond geïmporteerd."),
+            ("niet-geconfigureerd", _, _) => ("alert-danger", "Strava is nog niet geconfigureerd."),
+            ("polar-niet-geconfigureerd", _, _) => ("alert-danger", "Polar is nog niet geconfigureerd."),
+            ("ongeldige-state", _, _) => ("alert-danger", "De verbinding kon niet worden bevestigd. Probeer opnieuw."),
+            ("geweigerd", _, _) => ("alert-warning", "Je hebt de toegang tot Strava geweigerd."),
+            ("polar-geweigerd", _, _) => ("alert-warning", "Je hebt de toegang tot Polar geweigerd."),
+            ("onvoldoende-rechten", _, _) => ("alert-warning", "Vink bij Strava ‘Bekijk je privéactiviteiten’ aan, anders kan niet alles worden geïmporteerd."),
+            (_, "1", _) => ("alert-success", "Verbonden met Strava. De volledige historiek wordt op de achtergrond geïmporteerd."),
+            (_, _, "1") => ("alert-success", "Verbonden met Polar. Trainingen en herstel worden op de achtergrond opgehaald."),
             _ => null,
         };
 
         if (StravaOptions.Value.IsConfigured)
-            status = await Strava.GetStatusAsync();
+            stravaStatus = await Strava.GetStatusAsync();
+        if (PolarOptions.Value.IsConfigured)
+            polarStatus = await Polar.GetStatusAsync();
     }
 
-    private async Task SyncNu()
+    private async Task SyncStrava()
+    {
+        await Run(async () =>
+        {
+            var result = await Strava.SyncAsync();
+            Melding = result.Status switch
+            {
+                SyncStatus.Ok => ("alert-success", $"Strava klaar: {result.Added} nieuwe en {result.Updated} bijgewerkte activiteiten."),
+                SyncStatus.RateLimited => ("alert-warning", $"Strava-limiet bereikt ({result.Added} nieuwe activiteiten opgehaald). De rest volgt bij de volgende synchronisatie."),
+                SyncStatus.AuthFailed => ("alert-danger", "Strava weigert de toegang. Verbind opnieuw."),
+                _ => ("alert-warning", "Niet verbonden met Strava."),
+            };
+            stravaStatus = await Strava.GetStatusAsync();
+        });
+    }
+
+    private async Task SyncPolar()
+    {
+        await Run(async () =>
+        {
+            var result = await Polar.SyncAsync();
+            Melding = result.Status switch
+            {
+                SyncStatus.Ok => ("alert-success", $"Polar klaar: {result.Added} nieuwe trainingen, {result.Merged} samengevoegd met Strava, {result.Updated} bijgewerkt, {result.RecoveryDays} nachten herstel."),
+                SyncStatus.RateLimited => ("alert-warning", "Polar-limiet bereikt. Probeer later opnieuw."),
+                SyncStatus.AuthFailed => ("alert-danger", "Polar weigert de toegang of de toegang is verlopen. Verbind opnieuw."),
+                _ => ("alert-warning", "Niet verbonden met Polar."),
+            };
+            polarStatus = await Polar.GetStatusAsync();
+        });
+    }
+
+    private async Task Run(Func<Task> action)
     {
         bezig = true;
         Melding = null;
         try
         {
-            var result = await Strava.SyncAsync();
-            Melding = result.Status switch
-            {
-                SyncStatus.Ok => ("alert-success", $"Klaar: {result.Added} nieuwe en {result.Updated} bijgewerkte activiteiten."),
-                SyncStatus.RateLimited => ("alert-warning", $"Strava-limiet bereikt ({result.Added} nieuwe activiteiten opgehaald). De rest volgt bij de volgende synchronisatie."),
-                SyncStatus.AuthFailed => ("alert-danger", "Strava weigert de toegang. Verbind opnieuw."),
-                _ => ("alert-warning", "Niet verbonden met Strava."),
-            };
-            status = await Strava.GetStatusAsync();
+            await action();
         }
         catch (Exception ex)
         {

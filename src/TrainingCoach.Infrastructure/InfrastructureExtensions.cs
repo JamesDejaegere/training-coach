@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TrainingCoach.Infrastructure.Persistence;
 using TrainingCoach.Infrastructure.PlanImport;
+using TrainingCoach.Infrastructure.Polar;
 using TrainingCoach.Infrastructure.Strava;
 
 namespace TrainingCoach.Infrastructure;
@@ -25,6 +26,10 @@ public static class InfrastructureExtensions
         services.AddHttpClient<IStravaApi, StravaClient>();
         services.AddScoped<StravaSyncService>();
         services.AddHostedService<StravaSyncHostedService>();
+        services.Configure<PolarOptions>(configuration.GetSection(PolarOptions.Section));
+        services.AddHttpClient<IPolarApi, PolarClient>();
+        services.AddScoped<PolarSyncService>();
+        services.AddHostedService<PolarSyncHostedService>();
 
         var storage = new StorageLocations(dataDirectory);
         services.AddSingleton(storage);

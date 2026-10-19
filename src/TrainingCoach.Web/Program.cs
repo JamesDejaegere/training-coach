@@ -39,6 +39,7 @@ app.UseAntiforgery();
 
 app.MapDefaultEndpoints();
 app.MapStravaEndpoints();
+app.MapPolarEndpoints();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

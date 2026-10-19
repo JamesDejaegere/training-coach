@@ -29,8 +29,12 @@ public static class ActivityMapper
         target.ElevationGainMeters = source.TotalElevationGain;
         target.AverageSpeedMps = source.AverageSpeed;
         target.MaxSpeedMps = source.MaxSpeed;
-        target.AverageHeartRate = source.AverageHeartrate;
-        target.MaxHeartRate = source.MaxHeartrate;
+        // Polar is preferred for heart rate (SPEC 5.5): keep its values on a merged session.
+        if (target.PolarId is null)
+        {
+            target.AverageHeartRate = source.AverageHeartrate;
+            target.MaxHeartRate = source.MaxHeartrate;
+        }
         target.AverageCadence = source.AverageCadence;
         target.AverageWatts = source.AverageWatts;
         target.Kilojoules = source.Kilojoules;

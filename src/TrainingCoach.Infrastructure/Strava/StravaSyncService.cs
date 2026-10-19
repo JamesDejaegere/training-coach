@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using TrainingCoach.Domain.Planning;
 using TrainingCoach.Infrastructure.Persistence;
 
 namespace TrainingCoach.Infrastructure.Strava;
@@ -75,6 +76,11 @@ public sealed class StravaSyncService(AppDbContext db, IStravaApi api, TokenProt
                 foreach (var activity in activities)
                 {
                     if (existing.TryGetValue(activity.Id, out var entity)) updated++;
+                    else if (await ActivityLinker.FindPolarOnlyAsync(db, userId, KeyOf(activity), ct) is { } polarRow)
+                    {
+                        entity = polarRow; // same session already imported from Polar: one activity, both ids
+                        updated++;
+                    }
                     else
                     {
                         entity = new ActivityEntity { UserId = userId };
@@ -103,6 +109,9 @@ public sealed class StravaSyncService(AppDbContext db, IStravaApi api, TokenProt
             return new SyncResult(SyncStatus.AuthFailed, added, updated);
         }
     }
+
+    private static SessionKey KeyOf(StravaActivity a) =>
+        new(ActivityMapper.ToSportFamily(a.SportType), a.StartDate.UtcDateTime, a.ElapsedTime);
 
     private async Task<string> GetFreshAccessTokenAsync(ProviderConnectionEntity connection, CancellationToken ct)
     {

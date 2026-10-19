@@ -50,6 +50,12 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                     b.Property<double?>("EndLongitude")
                         .HasColumnType("REAL");
 
+                    b.Property<int?>("HrSampleIntervalSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("HrSamples")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("IsCommute")
                         .HasColumnType("INTEGER");
 
@@ -72,8 +78,14 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<double?>("PolarCardioLoad")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("PolarId")
                         .HasColumnType("TEXT");
+
+                    b.Property<double?>("PolarTrainingLoad")
+                        .HasColumnType("REAL");
 
                     b.Property<double?>("RelativeEffort")
                         .HasColumnType("REAL");
@@ -111,6 +123,9 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId", "PolarId")
+                        .IsUnique();
 
                     b.HasIndex("UserId", "StartLocal");
 
@@ -216,6 +231,56 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Connections");
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.RecoveryDayEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("AnsCharge")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("AnsChargeStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("BreathingRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("DeepSleepSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("Hrv")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("NightlyRechargeStatus")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RemSleepSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("RestingHeartRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("SleepScore")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("SleepSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("RecoveryDays");
                 });
 
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.WorkoutPhaseEntity", b =>

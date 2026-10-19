@@ -34,6 +34,14 @@ public class ActivityEntity
     /// <summary>Strava "Relative Effort"; shown for comparison only (SPEC 7.1).</summary>
     public double? RelativeEffort { get; set; }
 
+    /// <summary>Polar training load / cardio load; shown for comparison only (SPEC 7.1).</summary>
+    public double? PolarTrainingLoad { get; set; }
+    public double? PolarCardioLoad { get; set; }
+
+    /// <summary>Heart-rate samples (comma-separated bpm, empty slot = no value) for TRIMP (SPEC 7.1).</summary>
+    public string? HrSamples { get; set; }
+    public int? HrSampleIntervalSeconds { get; set; }
+
     public double? StartLatitude { get; set; }
     public double? StartLongitude { get; set; }
     public double? EndLatitude { get; set; }
@@ -46,6 +54,29 @@ public class ActivityEntity
 
     /// <summary>Session RPE 1–10, entered by the athlete after the session.</summary>
     public int? Rpe { get; set; }
+}
+
+/// <summary>One night from Polar: Nightly Recharge and sleep (SPEC 6, "Recovery day").</summary>
+public class RecoveryDayEntity
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    /// <summary>The morning the night ends on.</summary>
+    public DateOnly Date { get; set; }
+
+    /// <summary>Average nightly HRV (RMSSD, ms).</summary>
+    public double? Hrv { get; set; }
+    /// <summary>Average heart rate during the night; used as resting heart rate (SPEC 6).</summary>
+    public double? RestingHeartRate { get; set; }
+    public double? BreathingRate { get; set; }
+    public double? AnsCharge { get; set; }
+    public int? AnsChargeStatus { get; set; }
+    public int? NightlyRechargeStatus { get; set; }
+
+    public double? SleepScore { get; set; }
+    public int? SleepSeconds { get; set; }
+    public int? DeepSleepSeconds { get; set; }
+    public int? RemSleepSeconds { get; set; }
 }
 
 /// <summary>OAuth connection to an external provider; tokens are stored encrypted.</summary>
