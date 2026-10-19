@@ -17,6 +17,109 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.13");
 
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.ActivityEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("AverageCadence")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("AverageHeartRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("AverageSpeedMps")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("AverageWatts")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("DistanceMeters")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("ElapsedSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("ElevationGainMeters")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("EndLatitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("EndLongitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<bool>("IsCommute")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsTrainer")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("Kilojoules")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("MaxHeartRate")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("MaxSpeedMps")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("MovingSeconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PolarId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("RelativeEffort")
+                        .HasColumnType("REAL");
+
+                    b.Property<int?>("Rpe")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sport")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("StartLatitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("StartLocal")
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("StartLongitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("StartUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("StravaCommuteFlag")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long?>("StravaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("StravaSportType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "StartLocal");
+
+                    b.HasIndex("UserId", "StravaId")
+                        .IsUnique();
+
+                    b.ToTable("Activities");
+                });
+
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.PlannedSessionEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -69,6 +172,50 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "Date");
 
                     b.ToTable("PlannedSessions");
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.ProviderConnectionEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("AccessTokenExpiresUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("AccessTokenProtected")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("ConnectedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("ExternalAthleteId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastSyncUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RefreshTokenProtected")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("SyncCursorUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Provider")
+                        .IsUnique();
+
+                    b.ToTable("Connections");
                 });
 
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.WorkoutPhaseEntity", b =>

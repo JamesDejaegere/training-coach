@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using TrainingCoach.Infrastructure.Persistence;
 using TrainingCoach.Infrastructure.PlanImport;
+using TrainingCoach.Infrastructure.Strava;
 
 namespace TrainingCoach.Infrastructure;
 
@@ -15,8 +17,15 @@ public sealed record StorageLocations(string DataDirectory)
 
 public static class InfrastructureExtensions
 {
-    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string dataDirectory)
+    public static IServiceCollection AddInfrastructure(this IServiceCollection services, string dataDirectory, IConfiguration configuration)
     {
+        services.Configure<StravaOptions>(configuration.GetSection(StravaOptions.Section));
+        services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.Section));
+        services.AddSingleton<TokenProtector>();
+        services.AddHttpClient<IStravaApi, StravaClient>();
+        services.AddScoped<StravaSyncService>();
+        services.AddHostedService<StravaSyncHostedService>();
+
         var storage = new StorageLocations(dataDirectory);
         services.AddSingleton(storage);
         services.AddSingleton(TimeProvider.System);

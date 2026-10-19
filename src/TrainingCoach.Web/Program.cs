@@ -1,5 +1,6 @@
 using TrainingCoach.Infrastructure;
 using TrainingCoach.Infrastructure.Storage;
+using TrainingCoach.Web;
 using TrainingCoach.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,7 +9,7 @@ builder.AddServiceDefaults();
 
 var dataDirectory = DataDirectoryResolver.Resolve(builder.Configuration["DataDirectory"], builder.Environment.ContentRootPath);
 builder.Configuration["DataDirectory"] = dataDirectory;
-builder.Services.AddInfrastructure(dataDirectory);
+builder.Services.AddInfrastructure(dataDirectory, builder.Configuration);
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
@@ -37,6 +38,7 @@ app.UseHttpsRedirection();
 app.UseAntiforgery();
 
 app.MapDefaultEndpoints();
+app.MapStravaEndpoints();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()

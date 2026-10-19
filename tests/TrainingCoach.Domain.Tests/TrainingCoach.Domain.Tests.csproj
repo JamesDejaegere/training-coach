@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- Tests do not need cooperative cancellation. -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
     <OutputType>Exe</OutputType>
     <!-- No tests yet (exit code 8); remove once the first domain tests exist. -->
     <TestingPlatformCommandLineArguments>--ignore-exit-code 8</TestingPlatformCommandLineArguments>

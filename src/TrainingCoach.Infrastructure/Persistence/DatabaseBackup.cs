@@ -19,8 +19,9 @@ public static class DatabaseBackup
         // SQLite online backup: consistent even while the app is writing. Write to a temp file first so a crash never leaves a partial backup.
         var temp = target + ".tmp";
         File.Delete(temp);
-        using (var source = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString()))
-        using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = temp, Pooling = false }.ToString()))
+        // The source is opened read-write on purpose: a read-only connection cannot use the WAL index of a live database and fails with "database is locked".
+        using (var source = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = databasePath, Pooling = false, DefaultTimeout = 30 }.ToString()))
+        using (var destination = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = temp, Pooling = false, DefaultTimeout = 30 }.ToString()))
         {
             source.Open();
             destination.Open();

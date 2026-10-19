@@ -14,7 +14,8 @@ deviate – propose changes to the owner first and update both files when a deci
 
 - Design agreed 2026-10-17. Phase 1 steps 1–3 done (plan import + EF Core/SQLite persistence with migrations and daily backups; in Development the seed workbook is imported on first start; add migrations with `dotnet tool run dotnet-ef migrations add <Name> --project src/TrainingCoach.Infrastructure --output-dir Persistence/Migrations`): solution skeleton, CI, `data/` handling, `Local`/`HomeNetwork` profiles; domain calculations (TRIMP, load estimator, fitness model, plan matcher, commute detector, warnings; see D25–D26) with xunit.v3 tests. Tests run on Microsoft.Testing.Platform: use `dotnet test --solution TrainingCoach.slnx`.
 - Aspire AppHost picks the web launch profile via `WebLaunchProfile` (set in the AppHost launch profile). `Local` = https://localhost:7001, `HomeNetwork` = http://0.0.0.0:5001.
-- **Next: Phase 1 step 4** (SPEC §3, §12). Order (steps 1–3 done):
+- Step 4 (Strava) code is done and tested with fakes (D29): OAuth endpoints, token encryption, full + incremental sync, hourly service, Instellingen page. **Not yet verified against the live Strava API**: needs the owner's Strava app; user secrets `Strava:ClientId`, `Strava:ClientSecret` (and `Security:TokenKey`, already generated locally) must be set. HR streams for TRIMP and commute detection on stored activities (needs home/work settings) are still open.
+- **Next: finish step 4 (live check), then step 5** (SPEC §3, §12). Order (steps 1–3 done):
   1. Solution skeleton (SPEC §4.2): AppHost, ServiceDefaults, Web, Domain, Infrastructure, test projects; CI workflow; `data/` folder handling (SPEC §4.1); `Local` and `HomeNetwork` launch profiles.
   2. Domain + calculations with tests first: TRIMP, session-RPE, fitness/fatigue/form, plan matching, commute detection, warnings.
   3. Plan import from `seed/Schema_Antwerp_10_Miles_2027.xlsx` (sheet `Dagschema`; workout phases in `Polar trainingen`).
