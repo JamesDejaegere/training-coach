@@ -1,7 +1,175 @@
 ﻿@page "/"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@using Microsoft.EntityFrameworkCore
+@using TrainingCoach.Domain
+@using TrainingCoach.Domain.Calculations
+@using TrainingCoach.Domain.Planning
+@using TrainingCoach.Domain.Warnings
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
+@inject TrainingAnalytics Analytics
+@inject PlanStore Plan
+@inject AppDbContext Db
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Vandaag</PageTitle>
 
-<h1>Hello, world!</h1>
+<h1>Vandaag</h1>
 
-Welcome to your new app.
+@if (loading)
+{
+    <p>Laden…</p>
+}
+else
+{
+    <p class="lead">
+        @Format.Date(today)
+        <span class="text-muted ms-2">· nog @(Goal.RaceDate.DayNumber - today.DayNumber) dagen tot @Goal.RaceName (doel @Goal.TargetTime.ToString(@"h\:mm\:ss"))</span>
+    </p>
+
+    @foreach (var warning in warnings)
+    {
+        <div class="alert alert-warning" role="alert">
+            <strong>@WarningTitle(warning.Type)</strong> @warning.Message
+            <div class="small mt-1">Suggestie: @warning.SuggestedAction</div>
+        </div>
+    }
+
+    <h2 class="h4 mt-4">Training van vandaag</h2>
+
+    @if (view!.Items.Count == 0)
+    {
+        <p class="text-muted">Geen training gepland. Rustdag.</p>
+    }
+
+    @foreach (var item in view.Items)
+    {
+        <section class="card mb-3">
+            <div class="card-body">
+                <h3 class="h5">
+                    <span class="badge @Format.SportBadge(item.Session.Session.Sport) me-2">@Format.Sport(item.Session.Session.Sport)</span>
+                    @item.Session.Session.Title
+                    @if (item.Session.Status == PlannedStatus.Skipped)
+                    {
+                        <span class="badge text-bg-secondary ms-2">Overgeslagen</span>
+                    }
+                    else if (item.IsDone)
+                    {
+                        <span class="badge text-bg-success ms-2">Gedaan</span>
+                    }
+                </h3>
+                <p class="mb-2">@item.Session.Session.Description</p>
+                @if (item.Session.Session.PlannedDistanceKm is { } km)
+                {
+                    <p class="text-muted">Gepland: @Format.Km(km)</p>
+                }
+                @if (item.Session.Session.WorkoutName is { } name && workouts.TryGetValue(name, out var workout))
+                {
+                    <WorkoutView Workout="workout" />
+                }
+                @foreach (var activity in item.Activities)
+                {
+                    <p class="mb-0 small">
+                        ✔ <a href="/activiteiten/@activity.Id">@activity.Name</a> · @Format.Meters(activity.DistanceMeters) · @Format.Duration(activity.MovingSeconds)
+                        @if (activity.AverageHeartRate is { } hr) { <span> · gem. @hr.ToString("0") bpm</span> }
+                    </p>
+                }
+            </div>
+        </section>
+    }
+
+    @foreach (var extra in view.Extra)
+    {
+        <p class="small">
+            <span class="badge text-bg-light border">Extra</span>
+            <a href="/activiteiten/@extra.Id">@extra.Name</a> · @Format.Sport(extra.Sport) · @Format.Meters(extra.DistanceMeters)
+        </p>
+    }
+
+    <div class="row g-3 mt-2">
+        <div class="col-md-6">
+            <section class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5">Fitness, vermoeidheid en vorm</h2>
+                    @if (fitness is null)
+                    {
+                        <p class="text-muted">Nog geen activiteiten.</p>
+                    }
+                    else
+                    {
+                        <dl class="row mb-0">
+                            <dt class="col-6">Fitness</dt><dd class="col-6">@Format.Number(fitness.Value.Fitness, "0.0")</dd>
+                            <dt class="col-6">Vermoeidheid</dt><dd class="col-6">@Format.Number(fitness.Value.Fatigue, "0.0")</dd>
+                            <dt class="col-6">Vorm</dt>
+                            <dd class="col-6 @(fitness.Value.Form < -10 ? "text-danger" : fitness.Value.Form > 5 ? "text-success" : "")">@Format.Number(fitness.Value.Form, "+0.0;-0.0;0.0")</dd>
+                        </dl>
+                    }
+                </div>
+            </section>
+        </div>
+        <div class="col-md-6">
+            <section class="card h-100">
+                <div class="card-body">
+                    <h2 class="h5">Herstel afgelopen nacht</h2>
+                    @if (recovery is null)
+                    {
+                        <p class="text-muted">Nog geen herstelgegevens van Polar.</p>
+                    }
+                    else
+                    {
+                        <p class="small text-muted mb-1">@Format.Date(recovery.Date)</p>
+                        <dl class="row mb-0">
+                            <dt class="col-6">HRV</dt><dd class="col-6">@Show(recovery.Hrv, "0", "ms")</dd>
+                            <dt class="col-6">Rusthartslag</dt><dd class="col-6">@Show(recovery.RestingHeartRate, "0", "bpm")</dd>
+                            <dt class="col-6">ANS-lading</dt><dd class="col-6">@Show(recovery.AnsCharge, "0.0", "")</dd>
+                            <dt class="col-6">Slaapscore</dt><dd class="col-6">@Show(recovery.SleepScore, "0", "")</dd>
+                            <dt class="col-6">Slaap</dt>
+                            <dd class="col-6">@(recovery.SleepSeconds is { } s ? $"{s / 3600}u{s % 3600 / 60:00}" : "–")</dd>
+                        </dl>
+                    }
+                </div>
+            </section>
+        </div>
+    </div>
+}
+
+@code {
+    private bool loading = true;
+    private DateOnly today;
+    private PlanRangeView? view;
+    private IReadOnlyList<TrainingWarning> warnings = [];
+    private DailyFitness? fitness;
+    private RecoveryDayEntity? recovery;
+    private readonly Dictionary<string, WorkoutTemplate> workouts = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = Analytics.Today;
+        view = await Analytics.PlanViewAsync(today, today);
+        warnings = await Analytics.WarningsAsync(today);
+
+        foreach (var name in view.Items.Select(i => i.Session.Session.WorkoutName).OfType<string>().Distinct())
+        {
+            if (await Plan.GetWorkoutAsync(name) is { } workout) workouts[name] = workout;
+        }
+
+        var days = await Analytics.FitnessAsync(today, today);
+        fitness = days.Count > 0 && days[^1].Fitness > 0 ? days[^1] : null;
+
+        recovery = await Db.RecoveryDays.AsNoTracking()
+            .Where(r => r.UserId == UserIds.Owner && r.Date <= today)
+            .OrderByDescending(r => r.Date)
+            .FirstOrDefaultAsync();
+
+        loading = false;
+    }
+
+    private static string WarningTitle(WarningType type) => type switch
+    {
+        WarningType.BuildUp => "Opbouw.",
+        WarningType.Recovery => "Herstel.",
+        _ => "Pijn.",
+    };
+
+    private static string Show(double? value, string format, string unit) =>
+        value is { } v ? $"{v.ToString(format, Format.Culture)} {unit}".Trim() : "–";
+}

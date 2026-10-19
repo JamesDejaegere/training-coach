@@ -1,0 +1,165 @@
+@page "/schema"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@using TrainingCoach.Domain
+@using TrainingCoach.Domain.Calculations
+@using TrainingCoach.Domain.Planning
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
+@inject TrainingAnalytics Analytics
+@inject PlanStore Plan
+
+<PageTitle>Schema</PageTitle>
+
+<h1>Schema</h1>
+
+<div class="d-flex align-items-center gap-2 mb-3">
+    <button class="btn btn-outline-secondary" @onclick="() => Go(-7)" aria-label="Vorige week">‹</button>
+    <button class="btn btn-outline-secondary" @onclick="ThisWeek">Deze week</button>
+    <button class="btn btn-outline-secondary" @onclick="() => Go(7)" aria-label="Volgende week">›</button>
+    <strong class="ms-2">@Format.ShortDate(weekStart) – @Format.ShortDate(weekStart.AddDays(6))</strong>
+    @if (weekInfo is { } info)
+    {
+        <span class="text-muted">· week @info.Week, fase @info.Phase</span>
+    }
+</div>
+
+@if (view is null)
+{
+    <p>Laden…</p>
+}
+else
+{
+    <p class="text-muted">
+        Gepland lopen: @Format.Km(plannedRunKm) · gelopen: @Format.Km(actualRunKm)
+    </p>
+
+    @if (view.Items.Count == 0 && view.Extra.Count == 0)
+    {
+        <p class="text-muted">Geen sessies in deze week.</p>
+    }
+
+    @for (var i = 0; i < 7; i++)
+    {
+        var day = weekStart.AddDays(i);
+        var items = view.Items.Where(x => x.Session.Session.Date == day).ToList();
+        var extras = view.Extra.Where(a => DateOnly.FromDateTime(a.StartLocal) == day).ToList();
+        var commutes = view.Commutes.Where(a => DateOnly.FromDateTime(a.StartLocal) == day).ToList();
+
+        <section class="card mb-2 @(day == today ? "border-primary" : "")">
+            <div class="card-body py-2">
+                <div class="d-flex">
+                    <div class="me-3" style="min-width: 7rem;"><strong>@Format.ShortDate(day)</strong>@if (day == today) { <span class="badge text-bg-primary ms-1">vandaag</span> }</div>
+                    <div class="flex-grow-1">
+                        @if (items.Count == 0 && extras.Count == 0 && commutes.Count == 0)
+                        {
+                            <span class="text-muted">Rust</span>
+                        }
+
+                        @foreach (var item in items)
+                        {
+                            var s = item.Session;
+                            <div class="mb-2">
+                                <span class="badge @Format.SportBadge(s.Session.Sport) me-1">@Format.Sport(s.Session.Sport)</span>
+                                <span class="@(s.Status == PlannedStatus.Skipped ? "text-decoration-line-through text-muted" : "")">@s.Session.Title</span>
+                                @if (s.Session.PlannedDistanceKm is { } km) { <span class="text-muted"> · @Format.Km(km)</span> }
+                                @if (item.IsDone) { <span class="badge text-bg-success ms-1">Gedaan</span> }
+                                else if (s.Status == PlannedStatus.Skipped) { <span class="badge text-bg-secondary ms-1">Overgeslagen</span> }
+                                else if (s.Status == PlannedStatus.Moved) { <span class="badge text-bg-info ms-1">Verplaatst (was @Format.ShortDate(s.OriginalDate!.Value))</span> }
+                                else if (day < today) { <span class="badge text-bg-danger ms-1">Gemist</span> }
+
+                                @foreach (var a in item.Activities)
+                                {
+                                    <div class="small ms-3">✔ <a href="/activiteiten/@a.Id">@a.Name</a> · @Format.Meters(a.DistanceMeters) · @Format.Duration(a.MovingSeconds)</div>
+                                }
+
+                                @if (!item.IsDone)
+                                {
+                                    <div class="ms-3 mt-1">
+                                        @if (s.Status is PlannedStatus.Planned or PlannedStatus.Moved)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary me-1" @onclick="() => Skip(s.Id)">Overslaan</button>
+                                            <input type="date" class="form-control form-control-sm d-inline-block w-auto"
+                                                   value="@s.Session.Date.ToString("yyyy-MM-dd")"
+                                                   @onchange="e => Move(s.Id, e.Value?.ToString())" aria-label="Verplaats naar datum" />
+                                        }
+                                        @if (s.Status is PlannedStatus.Skipped or PlannedStatus.Moved)
+                                        {
+                                            <button class="btn btn-sm btn-outline-secondary ms-1" @onclick="() => Restore(s.Id)">Terugzetten</button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        @foreach (var a in commutes)
+                        {
+                            <div class="small text-muted"><span class="badge text-bg-light border">Pendel</span> <a href="/activiteiten/@a.Id">@a.Name</a> · @Format.Meters(a.DistanceMeters)</div>
+                        }
+                        @foreach (var a in extras)
+                        {
+                            <div class="small"><span class="badge text-bg-light border">Extra</span> <a href="/activiteiten/@a.Id">@a.Name</a> · @Format.Sport(a.Sport) · @Format.Meters(a.DistanceMeters)</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </section>
+    }
+}
+
+@code {
+    private DateOnly today;
+    private DateOnly weekStart;
+    private PlanRangeView? view;
+    private (int Week, string Phase)? weekInfo;
+    private double plannedRunKm;
+    private double actualRunKm;
+
+    protected override async Task OnInitializedAsync()
+    {
+        today = Analytics.Today;
+        weekStart = FitnessModel.WeekStart(today);
+        await Load();
+    }
+
+    private async Task Load()
+    {
+        view = await Analytics.PlanViewAsync(weekStart, weekStart.AddDays(6));
+        var first = view.Items.FirstOrDefault();
+        weekInfo = first is null ? null : (first.Session.Session.Week, first.Session.Session.Phase);
+        plannedRunKm = view.Items.Where(i => i.Session.Status != PlannedStatus.Skipped && i.Session.Session.Sport == SportFamily.Run)
+            .Sum(i => i.Session.Session.PlannedDistanceKm ?? 0);
+        actualRunKm = view.Items.SelectMany(i => i.Activities).Concat(view.Extra)
+            .Where(a => a.Sport == SportFamily.Run).Sum(a => a.DistanceMeters) / 1000;
+    }
+
+    private async Task Go(int days)
+    {
+        weekStart = weekStart.AddDays(days);
+        await Load();
+    }
+
+    private async Task ThisWeek()
+    {
+        weekStart = FitnessModel.WeekStart(today);
+        await Load();
+    }
+
+    private async Task Skip(int id)
+    {
+        await Plan.SetStatusAsync(id, PlannedStatus.Skipped);
+        await Load();
+    }
+
+    private async Task Restore(int id)
+    {
+        await Plan.RestoreAsync(id);
+        await Load();
+    }
+
+    private async Task Move(int id, string? date)
+    {
+        if (!DateOnly.TryParse(date, out var target)) return;
+        await Plan.MoveAsync(id, target);
+        await Load();
+    }
+}

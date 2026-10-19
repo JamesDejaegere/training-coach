@@ -1,0 +1,183 @@
+@page "/activiteiten/{Id:int}"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@using TrainingCoach.Domain
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
+@using TrainingCoach.Infrastructure.Polar
+@inject ActivityStore Store
+@inject TrainingAnalytics Analytics
+
+<PageTitle>Activiteit</PageTitle>
+
+<p><a href="/activiteiten">‹ Alle activiteiten</a></p>
+
+@if (loading)
+{
+    <p>Laden…</p>
+}
+else if (activity is null)
+{
+    <p class="text-danger">Activiteit niet gevonden.</p>
+}
+else
+{
+    var load = TrainingAnalytics.LoadOf(activity, profile!);
+    <h1>@activity.Name</h1>
+    <p class="lead">
+        <span class="badge @Format.SportBadge(activity.Sport)">@Format.Sport(activity.Sport)</span>
+        @Format.Date(DateOnly.FromDateTime(activity.StartLocal)) om @activity.StartLocal.ToString("HH:mm")
+        @if (TrainingAnalytics.IsCommute(activity, profile!)) { <span class="badge text-bg-light border ms-1">pendel</span> }
+    </p>
+
+    @if (linked is not null)
+    {
+        <p>Gekoppeld aan het schema: <strong>@linked.Session.Session.Title</strong> (@Format.ShortDate(linked.Session.Session.Date))</p>
+    }
+    else if (isExtra)
+    {
+        <p class="text-muted">Niet gepland: extra training.</p>
+    }
+
+    <div class="row g-3">
+        <div class="col-md-6">
+            <section class="card h-100"><div class="card-body">
+                <h2 class="h5">Gegevens</h2>
+                <dl class="row mb-0">
+                    <dt class="col-6">Afstand</dt><dd class="col-6">@Format.Meters(activity.DistanceMeters)</dd>
+                    <dt class="col-6">Tijd (in beweging)</dt><dd class="col-6">@Format.Duration(activity.MovingSeconds)</dd>
+                    <dt class="col-6">Tempo / snelheid</dt><dd class="col-6">@Format.PaceOrSpeed(activity)</dd>
+                    <dt class="col-6">Hoogtemeters</dt><dd class="col-6">@activity.ElevationGainMeters.ToString("0") m</dd>
+                    <dt class="col-6">Hartslag gem. / max.</dt>
+                    <dd class="col-6">@(activity.AverageHeartRate is { } a ? a.ToString("0") : "–") / @(activity.MaxHeartRate is { } m ? m.ToString("0") : "–") bpm</dd>
+                    <dt class="col-6">Bron</dt><dd class="col-6">@Format.Source(activity)</dd>
+                </dl>
+            </div></section>
+        </div>
+        <div class="col-md-6">
+            <section class="card h-100"><div class="card-body">
+                <h2 class="h5">Belasting</h2>
+                <dl class="row mb-0">
+                    <dt class="col-6">Eigen belasting</dt><dd class="col-6">@load.Value.ToString("0.0", Format.Culture) <span class="text-muted small">(@MethodName(load.Method))</span></dd>
+                    @if (activity.PolarTrainingLoad is { } pl) { <dt class="col-6">Polar training load</dt><dd class="col-6">@pl.ToString("0.0", Format.Culture)</dd> }
+                    @if (activity.PolarCardioLoad is { } pc) { <dt class="col-6">Polar cardio load</dt><dd class="col-6">@pc.ToString("0.0", Format.Culture)</dd> }
+                    @if (activity.RelativeEffort is { } re) { <dt class="col-6">Strava Relative Effort</dt><dd class="col-6">@re.ToString("0", Format.Culture)</dd> }
+                </dl>
+                <p class="small text-muted mt-2 mb-0">Polar en Strava tonen we enkel ter vergelijking; de eigen belasting telt mee.</p>
+            </div></section>
+        </div>
+    </div>
+
+    <section class="card mt-3"><div class="card-body">
+        <h2 class="h5">Hoe zwaar voelde het? (RPE)</h2>
+        <div class="btn-group flex-wrap" role="group" aria-label="RPE">
+            @for (var rpe = 1; rpe <= 10; rpe++)
+            {
+                var value = rpe;
+                <button type="button" class="btn @(activity.Rpe == value ? "btn-primary" : "btn-outline-primary")" @onclick="() => SetRpe(value)">@value</button>
+            }
+        </div>
+        @if (activity.Rpe is not null)
+        {
+            <button class="btn btn-link" @onclick="() => SetRpe(null)">Wissen</button>
+        }
+        <p class="small text-muted mt-2 mb-0">1 = heel licht, 10 = maximaal. Bij kracht- en mobiliteitstraining bepaalt dit de belasting.</p>
+    </div></section>
+
+    <section class="card mt-3"><div class="card-body">
+        <h2 class="h5">Pijn</h2>
+        @foreach (var p in pain)
+        {
+            <p class="mb-1">@p.Location (@p.Severity/10) @if (p.Note != "") { <span class="text-muted">– @p.Note</span> }
+                <button class="btn btn-sm btn-link text-danger" @onclick="() => DeletePain(p.Id)">verwijderen</button></p>
+        }
+        @if (pain.Count == 0) { <p class="text-muted">Geen pijn gemeld.</p> }
+
+        <div class="row g-2 mt-1">
+            <div class="col-sm-4">
+                <select class="form-select" @bind="painLocation" aria-label="Plaats">
+                    <option value="">Plaats…</option>
+                    @foreach (var l in Locations) { <option value="@l">@l</option> }
+                </select>
+            </div>
+            <div class="col-sm-3">
+                <input type="number" min="1" max="10" class="form-control" @bind="painSeverity" aria-label="Ernst (1-10)" />
+            </div>
+            <div class="col-sm-3">
+                <input type="text" class="form-control" placeholder="Notitie" @bind="painNote" />
+            </div>
+            <div class="col-sm-2">
+                <button class="btn btn-outline-primary w-100" @onclick="AddPain" disabled="@(painLocation == "")">Toevoegen</button>
+            </div>
+        </div>
+        @if (error is not null) { <p class="text-danger mt-2">@error</p> }
+    </div></section>
+}
+
+@code {
+    private static readonly string[] Locations = ["voet", "enkel", "kuit", "achillespees", "scheen", "knie", "hamstring", "quadriceps", "heup", "lies", "bil", "onderrug", "andere"];
+
+    [Parameter] public int Id { get; set; }
+
+    private bool loading = true;
+    private ActivityEntity? activity;
+    private AthleteProfile? profile;
+    private PlanItem? linked;
+    private bool isExtra;
+    private List<PainReportEntity> pain = [];
+    private string painLocation = "";
+    private int painSeverity = 3;
+    private string painNote = "";
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        loading = true;
+        activity = await Store.GetAsync(Id);
+        if (activity is not null)
+        {
+            profile = await Analytics.ProfileAsync();
+            var day = DateOnly.FromDateTime(activity.StartLocal);
+            var view = await Analytics.PlanViewAsync(day, day);
+            linked = view.Items.FirstOrDefault(i => i.Activities.Any(a => a.Id == Id));
+            isExtra = view.Extra.Any(a => a.Id == Id);
+            pain = (await Store.PainForActivityAsync(Id)).ToList();
+        }
+        loading = false;
+    }
+
+    private async Task SetRpe(int? rpe)
+    {
+        await Store.SetRpeAsync(Id, rpe);
+        activity = await Store.GetAsync(Id);
+    }
+
+    private async Task AddPain()
+    {
+        error = null;
+        try
+        {
+            await Store.AddPainAsync(Id, painLocation, painSeverity, painNote);
+            pain = (await Store.PainForActivityAsync(Id)).ToList();
+            painLocation = "";
+            painNote = "";
+        }
+        catch (ArgumentException ex)
+        {
+            error = ex.Message;
+        }
+    }
+
+    private async Task DeletePain(int painId)
+    {
+        await Store.DeletePainAsync(painId);
+        pain = (await Store.PainForActivityAsync(Id)).ToList();
+    }
+
+    private static string MethodName(TrainingCoach.Domain.Calculations.LoadMethod method) => method switch
+    {
+        TrainingCoach.Domain.Calculations.LoadMethod.TrimpSamples => "TRIMP uit hartslagmetingen",
+        TrainingCoach.Domain.Calculations.LoadMethod.TrimpAverageHr => "TRIMP uit gemiddelde hartslag",
+        TrainingCoach.Domain.Calculations.LoadMethod.SessionRpe => "sessie-RPE",
+        _ => "schatting op basis van duur",
+    };
+}

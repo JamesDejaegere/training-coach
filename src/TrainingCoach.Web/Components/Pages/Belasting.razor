@@ -1,0 +1,127 @@
+@page "/belasting"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@using Microsoft.EntityFrameworkCore
+@using TrainingCoach.Domain.Calculations
+@using TrainingCoach.Domain.Planning
+@using TrainingCoach.Domain.Warnings
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
+@inject TrainingAnalytics Analytics
+@inject AppDbContext Db
+
+<PageTitle>Belasting &amp; herstel</PageTitle>
+
+<h1>Belasting &amp; herstel</h1>
+
+<div class="mb-3">
+    <label for="range" class="me-2">Periode</label>
+    <select id="range" class="form-select d-inline-block w-auto" @bind="weeks" @bind:after="Load">
+        <option value="6">6 weken</option>
+        <option value="12">12 weken</option>
+        <option value="26">26 weken</option>
+    </select>
+</div>
+
+@if (loading)
+{
+    <p>Laden…</p>
+}
+else
+{
+    <h2 class="h4">Fitness, vermoeidheid en vorm</h2>
+    <LineChart Title="Fitness, vermoeidheid en vorm" Labels="fitnessLabels" Series="fitnessSeries" />
+    <p class="small text-muted">
+        Fitness = gewogen gemiddelde van de dagelijkse belasting over 42 dagen, vermoeidheid over 7 dagen, vorm = fitness − vermoeidheid.
+        @if (acwr is { } r) { <span>Acute:chronische belasting nu: <strong>@r.ToString("0.00", Format.Culture)</strong> (let op boven 1,3).</span> }
+    </p>
+
+    <h2 class="h4 mt-4">Weekvolume</h2>
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <thead><tr><th>Week vanaf</th><th class="text-end">Lopen</th><th class="text-end">Fietsen</th><th class="text-end">Kracht</th><th class="text-end">Totaal</th><th class="text-end">Belasting</th><th style="width:30%"></th></tr></thead>
+            <tbody>
+                @foreach (var w in volumes)
+                {
+                    <tr>
+                        <td>@Format.ShortDate(w.WeekStart)</td>
+                        <td class="text-end">@Format.Km(w.RunKm)</td>
+                        <td class="text-end">@Format.Km(w.RideKm)</td>
+                        <td class="text-end">@w.StrengthMinutes.ToString("0") min</td>
+                        <td class="text-end">@w.TotalHours.ToString("0.0", Format.Culture) u</td>
+                        <td class="text-end">@w.Load.ToString("0", Format.Culture)</td>
+                        <td><div class="bg-primary" style="height:.8rem;width:@(maxLoad > 0 ? (w.Load / maxLoad * 100).ToString("0", Format.Culture) : "0")%"></div></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <h2 class="h4 mt-4">HRV en rusthartslag</h2>
+    @if (recoveryLabels.Count == 0)
+    {
+        <p class="text-muted">Nog geen herstelgegevens. Verbind Polar bij <a href="/instellingen">Instellingen</a>.</p>
+    }
+    else
+    {
+        <h3 class="h6">HRV (ms)</h3>
+        <LineChart Title="HRV" Labels="recoveryLabels" Series="hrvSeries" BandLow="band?.Low" BandHigh="band?.High" ZeroBased="false" />
+        <h3 class="h6">Rusthartslag (bpm)</h3>
+        <LineChart Title="Rusthartslag" Labels="recoveryLabels" Series="restingSeries" ZeroBased="false" />
+    }
+}
+
+@code {
+    private bool loading = true;
+    private int weeks = 12;
+    private List<string> fitnessLabels = [];
+    private List<LineChart.ChartSeries> fitnessSeries = [];
+    private List<WeekVolume> volumes = [];
+    private double maxLoad;
+    private double? acwr;
+    private List<string> recoveryLabels = [];
+    private List<LineChart.ChartSeries> hrvSeries = [];
+    private List<LineChart.ChartSeries> restingSeries = [];
+    private HrvBand? band;
+
+    protected override Task OnInitializedAsync() => Load();
+
+    private async Task Load()
+    {
+        loading = true;
+        var today = Analytics.Today;
+        var from = today.AddDays(-weeks * 7 + 1);
+
+        var days = await Analytics.FitnessAsync(from, today);
+        fitnessLabels = days.Select(d => d.Date.ToString("d/M", Format.Culture)).ToList();
+        fitnessSeries =
+        [
+            new("Fitness", "#0d6efd", days.Select(d => (double?)d.Fitness).ToList()),
+            new("Vermoeidheid", "#dc3545", days.Select(d => (double?)d.Fatigue).ToList()),
+            new("Vorm", "#198754", days.Select(d => (double?)d.Form).ToList()),
+        ];
+
+        var loads = await Analytics.DailyLoadsAsync(today.AddDays(-27), today);
+        acwr = FitnessModel.AcuteChronicRatio(loads, today);
+
+        volumes = (await Analytics.WeeklyVolumesAsync(from, today)).ToList();
+        maxLoad = volumes.Count == 0 ? 0 : volumes.Max(v => v.Load);
+
+        await LoadRecovery(from, today);
+        loading = false;
+    }
+
+    private async Task LoadRecovery(DateOnly from, DateOnly today)
+    {
+        var nights = await Db.RecoveryDays.AsNoTracking()
+            .Where(r => r.UserId == UserIds.Owner && r.Date >= from && r.Date <= today)
+            .OrderBy(r => r.Date)
+            .ToListAsync();
+
+        recoveryLabels = nights.Select(n => n.Date.ToString("d/M", Format.Culture)).ToList();
+        hrvSeries = [new("HRV", "#6f42c1", nights.Select(n => n.Hrv).ToList())];
+        restingSeries = [new("Rusthartslag", "#fd7e14", nights.Select(n => n.RestingHeartRate).ToList())];
+
+        var hrv = nights.Where(n => n.Hrv != null).Select(n => n.Hrv!.Value).ToList();
+        band = hrv.Count >= 7 ? HrvBand.FromHistory(hrv) : null;
+    }
+}

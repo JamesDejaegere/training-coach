@@ -87,6 +87,16 @@ public sealed class PlanStore(AppDbContext db)
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Puts a skipped or moved session back as planned on its original date.</summary>
+    public async Task RestoreAsync(int sessionId, CancellationToken ct = default)
+    {
+        var session = await db.PlannedSessions.SingleAsync(s => s.Id == sessionId, ct);
+        if (session.OriginalDate is { } original) session.Date = original;
+        session.OriginalDate = null;
+        session.Status = PlannedStatus.Planned;
+        await db.SaveChangesAsync(ct);
+    }
+
     /// <summary>Moves a session to another day; keeps the original date and marks it as moved.</summary>
     public async Task MoveAsync(int sessionId, DateOnly newDate, CancellationToken ct = default)
     {

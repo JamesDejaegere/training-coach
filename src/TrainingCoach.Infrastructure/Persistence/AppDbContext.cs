@@ -9,6 +9,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ActivityEntity> Activities => Set<ActivityEntity>();
     public DbSet<ProviderConnectionEntity> Connections => Set<ProviderConnectionEntity>();
     public DbSet<RecoveryDayEntity> RecoveryDays => Set<RecoveryDayEntity>();
+    public DbSet<AthleteSettingsEntity> AthleteSettings => Set<AthleteSettingsEntity>();
+    public DbSet<PainReportEntity> PainReports => Set<PainReportEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -34,6 +36,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(a => new { a.UserId, a.StartLocal });
             e.Property(a => a.Sport).HasConversion<string>();
         });
+
+        modelBuilder.Entity<AthleteSettingsEntity>(e => e.HasIndex(s => s.UserId).IsUnique());
+        modelBuilder.Entity<PainReportEntity>(e => e.HasIndex(p => new { p.UserId, p.Date }));
 
         modelBuilder.Entity<RecoveryDayEntity>(e => e.HasIndex(r => new { r.UserId, r.Date }).IsUnique());
 

@@ -1,0 +1,128 @@
+@using System.Globalization
+@using System.Net
+@using System.Text
+
+@* Dependency-free SVG line chart. Null values break the line; an optional band is drawn behind the series.
+   The SVG is assembled as a string because Razor treats <text> as a special tag. *@
+
+<svg viewBox="0 0 @W @H" class="w-100" role="img" aria-label="@Title">
+    @((MarkupString)Body())
+</svg>
+
+<div class="small mb-3">
+    @foreach (var s in Series)
+    {
+        <span class="me-3"><span style="display:inline-block;width:12px;height:3px;background:@s.Color;vertical-align:middle"></span> @s.Name</span>
+    }
+    @if (BandLow is not null)
+    {
+        <span class="me-3"><span style="display:inline-block;width:12px;height:8px;background:#198754;opacity:.25;vertical-align:middle"></span> normaal bereik</span>
+    }
+</div>
+
+@code {
+    public sealed record ChartSeries(string Name, string Color, IReadOnlyList<double?> Values);
+
+    private const int W = 640, H = 220, Left = 40, Right = 10, Top = 10, Bottom = 24;
+
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public IReadOnlyList<string> Labels { get; set; } = [];
+    [Parameter] public IReadOnlyList<ChartSeries> Series { get; set; } = [];
+    [Parameter] public double? BandLow { get; set; }
+    [Parameter] public double? BandHigh { get; set; }
+    /// <summary>Start the y-axis at zero (load, volume); turn off for values like HRV or heart rate.</summary>
+    [Parameter] public bool ZeroBased { get; set; } = true;
+
+    private IEnumerable<double> Values() => Series.SelectMany(s => s.Values).Where(v => v is not null).Select(v => v!.Value);
+
+    private double Min
+    {
+        get
+        {
+            var values = Values().Concat(BandLow is { } l ? [l] : []).ToList();
+            if (values.Count == 0) return 0;
+            var min = values.Min();
+            return ZeroBased ? Math.Min(0, min) : Math.Floor(min * 0.9);
+        }
+    }
+
+    private double Max
+    {
+        get
+        {
+            var values = Values().Concat(BandHigh is { } h ? [h] : []).ToList();
+            var max = values.Count == 0 ? 1 : values.Max();
+            return max <= Min ? Min + 1 : max * 1.05;
+        }
+    }
+
+    private double SvgY(double value) => H - Bottom - (value - Min) / (Max - Min) * (H - Top - Bottom);
+
+    private double SvgX(int index) => Labels.Count <= 1 ? Left : Left + index * (double)(W - Left - Right) / (Labels.Count - 1);
+
+    private static string N(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    private string Body()
+    {
+        var sb = new StringBuilder();
+
+        var step = NiceStep((Max - Min) / 4);
+        for (var tick = Math.Ceiling(Min / step) * step; tick <= Max + 1e-9; tick += step)
+        {
+            var y = SvgY(tick);
+            sb.Append($"<line x1=\"{Left}\" x2=\"{W - Right}\" y1=\"{N(y)}\" y2=\"{N(y)}\" stroke=\"#dee2e6\" stroke-width=\"1\" />");
+            sb.Append($"<text x=\"{Left - 6}\" y=\"{N(y + 4)}\" text-anchor=\"end\" font-size=\"11\" fill=\"#6c757d\">{N(tick)}</text>");
+        }
+
+        if (BandLow is { } low && BandHigh is { } high)
+        {
+            var top = SvgY(high);
+            sb.Append($"<rect x=\"{Left}\" width=\"{W - Left - Right}\" y=\"{N(top)}\" height=\"{N(Math.Max(0, SvgY(low) - top))}\" fill=\"#198754\" opacity=\"0.12\" />");
+        }
+
+        foreach (var series in Series)
+        {
+            foreach (var segment in Segments(series))
+                sb.Append($"<polyline points=\"{segment}\" fill=\"none\" stroke=\"{WebUtility.HtmlEncode(series.Color)}\" stroke-width=\"2\" stroke-linejoin=\"round\" />");
+        }
+
+        foreach (var i in LabelIndexes())
+            sb.Append($"<text x=\"{N(SvgX(i))}\" y=\"{H - 6}\" text-anchor=\"middle\" font-size=\"11\" fill=\"#6c757d\">{WebUtility.HtmlEncode(Labels[i])}</text>");
+
+        return sb.ToString();
+    }
+
+    private static double NiceStep(double raw)
+    {
+        if (raw <= 0) return 1;
+        var pow = Math.Pow(10, Math.Floor(Math.Log10(raw)));
+        var f = raw / pow;
+        return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pow;
+    }
+
+    private IEnumerable<int> LabelIndexes()
+    {
+        if (Labels.Count == 0) yield break;
+        yield return 0;
+        if (Labels.Count > 2) yield return Labels.Count / 2;
+        if (Labels.Count > 1) yield return Labels.Count - 1;
+    }
+
+    private IEnumerable<string> Segments(ChartSeries series)
+    {
+        var current = new List<string>();
+        for (var i = 0; i < series.Values.Count; i++)
+        {
+            if (series.Values[i] is { } v)
+            {
+                current.Add($"{N(SvgX(i))},{N(SvgY(v))}");
+            }
+            else if (current.Count > 0)
+            {
+                yield return string.Join(' ', current);
+                current.Clear();
+            }
+        }
+        if (current.Count > 0) yield return string.Join(' ', current);
+    }
+}

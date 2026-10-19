@@ -1,0 +1,60 @@
+@using TrainingCoach.Domain.Planning
+
+@* Renders the phases of a structured workout; a repeat phase wraps the phases it repeats. *@
+
+@if (Workout is not null)
+{
+    <ol class="list-group list-group-numbered mb-2">
+        @foreach (var phase in TopLevel())
+        {
+            @if (phase.Kind == PhaseKind.Repeat)
+            {
+                <li class="list-group-item list-group-item-light">
+                    <strong>Herhaal @phase.Repeats×</strong>
+                    <ul class="mb-0 mt-1">
+                        @foreach (var inner in Inner(phase))
+                        {
+                            <li>@Describe(inner)</li>
+                        }
+                    </ul>
+                </li>
+            }
+            else
+            {
+                <li class="list-group-item">@Describe(phase)</li>
+            }
+        }
+    </ol>
+}
+
+@code {
+    [Parameter] public WorkoutTemplate? Workout { get; set; }
+
+    /// <summary>Phases that are not part of a repeat block (the repeat phase itself is included).</summary>
+    private IEnumerable<WorkoutPhase> TopLevel()
+    {
+        var repeated = Workout!.Phases
+            .Where(p => p.Kind == PhaseKind.Repeat)
+            .SelectMany(r => Enumerable.Range(r.RepeatFromPhase!.Value, r.RepeatToPhase!.Value - r.RepeatFromPhase.Value + 1))
+            .ToHashSet();
+        return Workout.Phases.Where(p => !repeated.Contains(p.Number));
+    }
+
+    private IEnumerable<WorkoutPhase> Inner(WorkoutPhase repeat) =>
+        Workout!.Phases.Where(p => p.Number >= repeat.RepeatFromPhase && p.Number <= repeat.RepeatToPhase);
+
+    private static string Describe(WorkoutPhase p)
+    {
+        var amount = p.Kind switch
+        {
+            PhaseKind.Distance => TrainingCoach.Web.Components.Format.Km(p.DistanceKm),
+            PhaseKind.Time => p.Duration!.Value.TotalMinutes >= 1 && p.Duration.Value.Seconds == 0
+                ? $"{(int)p.Duration.Value.TotalMinutes} min"
+                : TrainingCoach.Web.Components.Format.Duration((int)p.Duration!.Value.TotalSeconds),
+            _ => "",
+        };
+        var target = p.Target is "" or "—" ? "" : $" · {p.Target}";
+        var note = string.IsNullOrWhiteSpace(p.Notes) ? "" : $" – {p.Notes}";
+        return $"{p.Name}: {amount}{target}{note}";
+    }
+}

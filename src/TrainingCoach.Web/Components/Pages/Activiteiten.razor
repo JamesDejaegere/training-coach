@@ -1,0 +1,97 @@
+@page "/activiteiten"
+@rendermode RenderModes.InteractiveServerNoPrerender
+@using TrainingCoach.Domain
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
+@inject ActivityStore Store
+@inject TrainingAnalytics Analytics
+
+<PageTitle>Activiteiten</PageTitle>
+
+<h1>Activiteiten</h1>
+
+<div class="mb-3">
+    <label class="me-2" for="sport">Sport</label>
+    <select id="sport" class="form-select d-inline-block w-auto" @onchange="OnSportChanged">
+        <option value="">Alle</option>
+        @foreach (var sport in Enum.GetValues<SportFamily>())
+        {
+            <option value="@sport">@Format.Sport(sport)</option>
+        }
+    </select>
+</div>
+
+@if (profile is null)
+{
+    <p>Laden…</p>
+}
+else if (activities.Count == 0)
+{
+    <p class="text-muted">Nog geen activiteiten. Verbind Strava of Polar bij <a href="/instellingen">Instellingen</a>.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-sm align-middle">
+            <thead>
+                <tr><th>Datum</th><th>Sport</th><th>Naam</th><th class="text-end">Afstand</th><th class="text-end">Tijd</th><th class="text-end">Tempo</th><th class="text-end">Gem. HR</th><th class="text-end">Belasting</th><th class="text-end">RPE</th><th>Bron</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var a in activities)
+                {
+                    var load = TrainingAnalytics.LoadOf(a, profile);
+                    <tr>
+                        <td>@Format.ShortDate(DateOnly.FromDateTime(a.StartLocal))</td>
+                        <td><span class="badge @Format.SportBadge(a.Sport)">@Format.Sport(a.Sport)</span></td>
+                        <td><a href="/activiteiten/@a.Id">@a.Name</a>@if (TrainingAnalytics.IsCommute(a, profile)) { <span class="badge text-bg-light border ms-1">pendel</span> }</td>
+                        <td class="text-end">@Format.Meters(a.DistanceMeters)</td>
+                        <td class="text-end">@Format.Duration(a.MovingSeconds)</td>
+                        <td class="text-end">@Format.PaceOrSpeed(a)</td>
+                        <td class="text-end">@(a.AverageHeartRate is { } hr ? hr.ToString("0") : "–")</td>
+                        <td class="text-end">@load.Value.ToString("0", Format.Culture)</td>
+                        <td class="text-end">@(a.Rpe?.ToString() ?? "–")</td>
+                        <td class="small text-muted">@Format.Source(a)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (hasMore)
+    {
+        <button class="btn btn-outline-secondary" @onclick="LoadMore">Meer laden</button>
+    }
+}
+
+@code {
+    private const int PageSize = 50;
+    private readonly List<ActivityEntity> activities = [];
+    private AthleteProfile? profile;
+    private SportFamily? sport;
+    private bool hasMore;
+
+    protected override async Task OnInitializedAsync()
+    {
+        profile = await Analytics.ProfileAsync();
+        await Reload();
+    }
+
+    private async Task OnSportChanged(ChangeEventArgs e)
+    {
+        sport = Enum.TryParse<SportFamily>(e.Value?.ToString(), out var s) ? s : null;
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        activities.Clear();
+        await LoadMore();
+    }
+
+    private async Task LoadMore()
+    {
+        var page = await Store.ListAsync(sport, PageSize, activities.Count);
+        activities.AddRange(page);
+        hasMore = page.Count == PageSize;
+    }
+}

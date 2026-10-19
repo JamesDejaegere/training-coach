@@ -35,6 +35,8 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+app.UseRequestLocalization(o => o.SetDefaultCulture("nl-BE").AddSupportedCultures("nl-BE").AddSupportedUICultures("nl-BE"));
+
 app.UseAntiforgery();
 
 app.MapDefaultEndpoints();

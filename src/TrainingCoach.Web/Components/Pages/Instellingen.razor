@@ -1,8 +1,11 @@
 @page "/instellingen"
 @rendermode InteractiveServer
 @using Microsoft.Extensions.Options
+@using TrainingCoach.Infrastructure.Analytics
+@using TrainingCoach.Infrastructure.Persistence
 @using TrainingCoach.Infrastructure.Polar
 @using TrainingCoach.Infrastructure.Strava
+@inject AthleteSettingsStore SettingsStore
 @inject StravaSyncService Strava
 @inject PolarSyncService Polar
 @inject IOptions<StravaOptions> StravaOptions
@@ -12,6 +15,55 @@
 <PageTitle>Instellingen</PageTitle>
 
 <h1>Instellingen</h1>
+
+<h2>Atleet</h2>
+
+<section class="card mb-3">
+    <div class="card-body">
+        @if (settings is null)
+        {
+            <p>Laden…</p>
+        }
+        else
+        {
+            <div class="row g-3">
+                <div class="col-sm-4">
+                    <label class="form-label" for="hrmax">Maximale hartslag (bpm)</label>
+                    <input id="hrmax" type="number" class="form-control" @bind="settings.HrMax" />
+                </div>
+                <div class="col-sm-4">
+                    <label class="form-label" for="hrrest">Rusthartslag overschrijven (bpm)</label>
+                    <input id="hrrest" type="number" class="form-control" placeholder="automatisch uit Polar" @bind="settings.RestingHrOverride" />
+                </div>
+                <div class="col-sm-4">
+                    <label class="form-label" for="radius">Straal pendelherkenning (m)</label>
+                    <input id="radius" type="number" class="form-control" @bind="settings.CommuteRadiusMeters" />
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label" for="homelat">Thuis – breedtegraad</label>
+                    <input id="homelat" type="number" step="any" class="form-control" @bind="settings.HomeLatitude" />
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label" for="homelon">Thuis – lengtegraad</label>
+                    <input id="homelon" type="number" step="any" class="form-control" @bind="settings.HomeLongitude" />
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label" for="worklat">Werk – breedtegraad</label>
+                    <input id="worklat" type="number" step="any" class="form-control" @bind="settings.WorkLatitude" />
+                </div>
+                <div class="col-sm-3">
+                    <label class="form-label" for="worklon">Werk – lengtegraad</label>
+                    <input id="worklon" type="number" step="any" class="form-control" @bind="settings.WorkLongitude" />
+                </div>
+            </div>
+            <p class="small text-muted mt-2">
+                Thuis en werk worden gebruikt om pendelritten te herkennen. Je vindt de coördinaten door in Google Maps met rechtermuisknop op de plaats te klikken.
+            </p>
+            <button class="btn btn-primary" @onclick="SaveSettings">Opslaan</button>
+            @if (settingsMessage is not null) { <span class="ms-2 @(settingsOk ? "text-success" : "text-danger")">@settingsMessage</span> }
+        }
+    </div>
+</section>
 
 <h2>Verbindingen</h2>
 
@@ -103,6 +155,9 @@
 </section>
 
 @code {
+    private AthleteSettingsEntity? settings;
+    private string? settingsMessage;
+    private bool settingsOk;
     private StravaStatus? stravaStatus;
     private PolarStatus? polarStatus;
     private bool bezig;
@@ -124,10 +179,26 @@
             _ => null,
         };
 
+        settings = await SettingsStore.GetAsync();
         if (StravaOptions.Value.IsConfigured)
             stravaStatus = await Strava.GetStatusAsync();
         if (PolarOptions.Value.IsConfigured)
             polarStatus = await Polar.GetStatusAsync();
+    }
+
+    private async Task SaveSettings()
+    {
+        try
+        {
+            await SettingsStore.SaveAsync(settings!);
+            settingsOk = true;
+            settingsMessage = "Opgeslagen.";
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            settingsOk = false;
+            settingsMessage = ex.Message.Replace("Max HR", "Maximale hartslag").Replace("Resting HR", "Rusthartslag");
+        }
     }
 
     private async Task SyncStrava()

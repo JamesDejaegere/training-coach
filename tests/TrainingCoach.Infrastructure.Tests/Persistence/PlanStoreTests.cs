@@ -94,6 +94,27 @@ public sealed class PlanStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task Restore_puts_a_moved_or_skipped_session_back_on_its_original_day_as_planned()
+    {
+        await using var db = _db.CreateContext();
+        var store = new PlanStore(db);
+        await store.ImportAsync(SmallPlan());
+        var original = new DateOnly(2026, 10, 19);
+        var id = (await store.GetSessionsAsync(original, original))[0].Id;
+
+        await store.MoveAsync(id, original.AddDays(3));
+        await store.MoveAsync(id, original.AddDays(4)); // moving twice must not lose the first original date
+        await store.RestoreAsync(id);
+
+        var restored = (await store.GetSessionsAsync(original, original)).Single();
+        Assert.Equal((id, PlannedStatus.Planned, null), (restored.Id, restored.Status, restored.OriginalDate));
+
+        await store.SetStatusAsync(id, PlannedStatus.Skipped);
+        await store.RestoreAsync(id);
+        Assert.Equal(PlannedStatus.Planned, (await store.GetSessionsAsync(original, original)).Single().Status);
+    }
+
+    [Fact]
     public async Task Every_row_belongs_to_a_user()
     {
         await using var db = _db.CreateContext();

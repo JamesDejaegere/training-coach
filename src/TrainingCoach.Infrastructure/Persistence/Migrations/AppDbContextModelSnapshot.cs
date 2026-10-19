@@ -135,6 +135,80 @@ namespace TrainingCoach.Infrastructure.Persistence.Migrations
                     b.ToTable("Activities");
                 });
 
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.AthleteSettingsEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("BodyWeightKg")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("CommuteRadiusMeters")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("HomeLatitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("HomeLongitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("HrMax")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("RestingHrOverride")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("WorkLatitude")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("WorkLongitude")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("AthleteSettings");
+                });
+
+            modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.PainReportEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ActivityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Location")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "Date");
+
+                    b.ToTable("PainReports");
+                });
+
             modelBuilder.Entity("TrainingCoach.Infrastructure.Persistence.PlannedSessionEntity", b =>
                 {
                     b.Property<int>("Id")

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using TrainingCoach.Infrastructure.Analytics;
 using TrainingCoach.Infrastructure.Persistence;
 using TrainingCoach.Infrastructure.PlanImport;
 using TrainingCoach.Infrastructure.Polar;
@@ -36,6 +37,9 @@ public static class InfrastructureExtensions
         services.AddSingleton(TimeProvider.System);
         services.AddDbContext<AppDbContext>(o => o.UseSqlite($"Data Source={storage.DatabasePath}"));
         services.AddScoped<PlanStore>();
+        services.AddScoped<AthleteSettingsStore>();
+        services.AddScoped<ActivityStore>();
+        services.AddScoped<TrainingAnalytics>();
         services.AddHostedService<DatabaseBackupService>();
         return services;
     }
