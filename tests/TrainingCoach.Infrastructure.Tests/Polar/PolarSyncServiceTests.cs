@@ -123,6 +123,29 @@ public sealed class PolarSyncServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task A_session_already_imported_from_the_export_under_another_id_is_updated_not_duplicated()
+    {
+        await using var db = _db.CreateContext();
+        db.Activities.Add(new ActivityEntity
+        {
+            UserId = 1, StravaId = 77, PolarId = "8300009631", Name = "Ochtendloop", Sport = SportFamily.Run,
+            StartUtc = new DateTime(2026, 10, 19, 6, 30, 0, DateTimeKind.Utc), StartLocal = LocalStart,
+            ElapsedSeconds = 3600, MovingSeconds = 3600, HrSamples = "100,101", HrSampleIntervalSeconds = 1,
+        });
+        await db.SaveChangesAsync();
+        _api.Exercises.Add(PolarTestData.Exercise("E1", LocalStart, duration: "PT1H"));
+        var service = Service(db);
+        await service.ConnectAsync(Tokens());
+
+        var result = await service.SyncAsync();
+
+        Assert.Equal((0, 1), (result.Added, result.Merged));
+        var row = await db.Activities.AsNoTracking().SingleAsync();
+        Assert.Equal((77L, "E1", "Ochtendloop"), (row.StravaId, row.PolarId, row.Name));
+        Assert.Equal("100,110,120", row.HrSamples);
+    }
+
+    [Fact]
     public async Task Different_sport_or_far_apart_start_stays_a_separate_activity()
     {
         await using var db = _db.CreateContext();

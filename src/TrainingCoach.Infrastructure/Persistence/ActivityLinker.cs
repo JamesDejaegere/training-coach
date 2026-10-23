@@ -14,6 +14,14 @@ public static class ActivityLinker
     public static Task<ActivityEntity?> FindStravaOnlyAsync(AppDbContext db, int userId, SessionKey key, CancellationToken ct) =>
         FindAsync(db, userId, key, a => a.StravaId != null && a.PolarId == null, ct);
 
+    /// <summary>A stored activity from any source that is the same session as <paramref name="key"/> (export import, SPEC 5.3).</summary>
+    public static Task<ActivityEntity?> FindAnyAsync(AppDbContext db, int userId, SessionKey key, CancellationToken ct) =>
+        FindAsync(db, userId, key, a => true, ct);
+
+    /// <summary>A stored activity that already carries a Polar id and is the same session (e.g. imported from the export earlier).</summary>
+    public static Task<ActivityEntity?> FindWithPolarIdAsync(AppDbContext db, int userId, SessionKey key, CancellationToken ct) =>
+        FindAsync(db, userId, key, a => a.PolarId != null, ct);
+
     private static async Task<ActivityEntity?> FindAsync(
         AppDbContext db, int userId, SessionKey key, System.Linq.Expressions.Expression<Func<ActivityEntity, bool>> source, CancellationToken ct)
     {

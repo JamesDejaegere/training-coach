@@ -66,7 +66,10 @@ public sealed class PolarSyncService(AppDbContext db, IPolarApi api, TokenProtec
                     continue;
                 }
 
-                var counterpart = await ActivityLinker.FindStravaOnlyAsync(db, userId, PolarMapper.KeyOf(exercise), ct);
+                var key = PolarMapper.KeyOf(exercise);
+                // Strava-only row, or a row the Polar export already imported under its own (numeric) id.
+                var counterpart = await ActivityLinker.FindStravaOnlyAsync(db, userId, key, ct)
+                                  ?? await ActivityLinker.FindWithPolarIdAsync(db, userId, key, ct);
                 if (counterpart is not null)
                 {
                     PolarMapper.Apply(exercise, counterpart, createdFromPolar: false);

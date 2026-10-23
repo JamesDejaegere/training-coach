@@ -3,11 +3,15 @@
 @using Microsoft.Extensions.Options
 @using TrainingCoach.Infrastructure.Analytics
 @using TrainingCoach.Infrastructure.Persistence
+@using TrainingCoach.Infrastructure
 @using TrainingCoach.Infrastructure.Polar
+@using TrainingCoach.Infrastructure.PolarExport
 @using TrainingCoach.Infrastructure.Strava
 @inject AthleteSettingsStore SettingsStore
 @inject StravaSyncService Strava
 @inject PolarSyncService Polar
+@inject PolarExportImporter PolarImport
+@inject StorageLocations Storage
 @inject IOptions<StravaOptions> StravaOptions
 @inject IOptions<PolarOptions> PolarOptions
 @inject NavigationManager Navigation
@@ -154,10 +158,40 @@
     </div>
 </section>
 
+<section class="card mb-3">
+    <div class="card-body">
+        <h3 class="h5">Polar-export importeren</h3>
+        <p class="small text-muted">
+            Vult je geschiedenis aan met trainingen (met hartslagmetingen), HRV, rusthartslag en slaap van vóór het koppelen.
+            Zet de zip van "Download your data" in de map <code>@Storage.PolarExportDirectory</code>. Opnieuw importeren is veilig.
+        </p>
+        @if (exportFiles.Count == 0)
+        {
+            <p class="text-muted">Geen zip-bestand gevonden.</p>
+        }
+        @foreach (var file in exportFiles)
+        {
+            <div class="d-flex align-items-center gap-3 mb-2">
+                <span>@file.Name <span class="text-muted small">(@((file.Length / 1_000_000.0).ToString("0", Format.Culture)) MB)</span></span>
+                <button class="btn btn-primary" @onclick="() => ImportExport(file.FullName)" disabled="@(bezig || importing)">
+                    @(importing ? "Bezig met importeren…" : "Importeren")
+                </button>
+            </div>
+        }
+        @if (importProgress is not null) { <p class="small text-muted mb-1">@importProgress</p> }
+        @if (importMessage is not null) { <p class="@(importOk ? "text-success" : "text-danger") mb-0">@importMessage</p> }
+    </div>
+</section>
+
 @code {
     private AthleteSettingsEntity? settings;
     private string? settingsMessage;
     private bool settingsOk;
+    private List<FileInfo> exportFiles = [];
+    private bool importing;
+    private string? importProgress;
+    private string? importMessage;
+    private bool importOk;
     private StravaStatus? stravaStatus;
     private PolarStatus? polarStatus;
     private bool bezig;
@@ -180,6 +214,9 @@
         };
 
         settings = await SettingsStore.GetAsync();
+        exportFiles = Directory.Exists(Storage.PolarExportDirectory)
+            ? new DirectoryInfo(Storage.PolarExportDirectory).GetFiles("*.zip").OrderBy(f => f.Name).ToList()
+            : [];
         if (StravaOptions.Value.IsConfigured)
             stravaStatus = await Strava.GetStatusAsync();
         if (PolarOptions.Value.IsConfigured)
@@ -198,6 +235,33 @@
         {
             settingsOk = false;
             settingsMessage = ex.Message.Replace("Max HR", "Maximale hartslag").Replace("Resting HR", "Rusthartslag");
+        }
+    }
+
+    private async Task ImportExport(string path)
+    {
+        importing = true;
+        importMessage = null;
+        importProgress = "Bezig…";
+        try
+        {
+            var progress = new Progress<string>(message => _ = InvokeAsync(() => { importProgress = message; StateHasChanged(); }));
+            var result = await PolarImport.ImportAsync(path, progress);
+            importOk = true;
+            importMessage = $"Klaar: {result.SessionsCreated} nieuwe trainingen, {result.SessionsMerged} samengevoegd met bestaande, " +
+                            $"{result.SessionsUpdated} bijgewerkt; {result.NightsAdded} nachten toegevoegd, {result.NightsFilled} aangevuld" +
+                            (result.FilesSkipped > 0 ? $" ({result.FilesSkipped} onleesbare bestanden overgeslagen)" : "") + ".";
+            polarStatus = await Polar.GetStatusAsync();
+        }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or System.Text.Json.JsonException)
+        {
+            importOk = false;
+            importMessage = $"Importeren mislukt: {ex.Message}";
+        }
+        finally
+        {
+            importing = false;
+            importProgress = null;
         }
     }
 

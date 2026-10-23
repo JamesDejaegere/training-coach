@@ -6,6 +6,7 @@ using TrainingCoach.Infrastructure.Analytics;
 using TrainingCoach.Infrastructure.Persistence;
 using TrainingCoach.Infrastructure.PlanImport;
 using TrainingCoach.Infrastructure.Polar;
+using TrainingCoach.Infrastructure.PolarExport;
 using TrainingCoach.Infrastructure.Strava;
 using TrainingCoach.Infrastructure.Strength;
 
@@ -16,6 +17,8 @@ public sealed record StorageLocations(string DataDirectory)
 {
     public string DatabasePath => Path.Combine(DataDirectory, "trainingcoach.db");
     public string BackupDirectory => Path.Combine(DataDirectory, "backups");
+    /// <summary>Where the owner drops the Polar Flow "Download your data" zip (SPEC 5.3).</summary>
+    public string PolarExportDirectory => Path.Combine(DataDirectory, "polar-export");
 }
 
 public static class InfrastructureExtensions
@@ -31,6 +34,7 @@ public static class InfrastructureExtensions
         services.Configure<PolarOptions>(configuration.GetSection(PolarOptions.Section));
         services.AddHttpClient<IPolarApi, PolarClient>();
         services.AddScoped<PolarSyncService>();
+        services.AddScoped<PolarExportImporter>();
         services.AddHostedService<PolarSyncHostedService>();
 
         var storage = new StorageLocations(dataDirectory);
